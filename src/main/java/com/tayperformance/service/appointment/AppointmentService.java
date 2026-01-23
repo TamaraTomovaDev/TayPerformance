@@ -3,6 +3,7 @@ package com.tayperformance.service.appointment;
 import com.tayperformance.dto.appointment.AppointmentResponse;
 import com.tayperformance.entity.*;
 import com.tayperformance.exception.ConflictException;
+import com.tayperformance.mapper.AppointmentMapper;
 import com.tayperformance.repository.*;
 import com.tayperformance.util.PhoneNumberHelper;
 import com.tayperformance.service.sms.SmsService;

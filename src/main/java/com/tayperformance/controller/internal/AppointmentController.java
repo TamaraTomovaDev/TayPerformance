@@ -1,8 +1,7 @@
 package com.tayperformance.controller.internal;
 
 import com.tayperformance.dto.appointment.AppointmentResponse;
-import com.tayperformance.entity.Appointment;
-import com.tayperformance.service.appointment.AppointmentMapper;
+import com.tayperformance.mapper.AppointmentMapper;
 import com.tayperformance.service.appointment.AppointmentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
