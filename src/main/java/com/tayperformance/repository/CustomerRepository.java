@@ -4,12 +4,11 @@ import com.tayperformance.entity.Customer;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
+import java.util.List;
 
 public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
-    /**
-     * Zoek klant op telefoonnummer
-     * (telefoon is uniek)
-     */
-    Optional<Customer> findByPhone(String phone);
+    Optional<Customer> findByPhoneAndActiveTrue(String phone);
+
+    List<Customer> findAllByActiveTrueOrderByFirstNameAsc();
 }

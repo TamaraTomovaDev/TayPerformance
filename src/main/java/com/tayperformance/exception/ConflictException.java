@@ -1,16 +1,18 @@
 package com.tayperformance.exception;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ResponseStatus;
+import lombok.Getter;
+import java.time.OffsetDateTime;
 
-/**
- * Wordt gebruikt wanneer een business-conflict optreedt
- * (bv. dubbele afspraak in hetzelfde tijdslot)
- */
-@ResponseStatus(HttpStatus.CONFLICT)
+@Getter
 public class ConflictException extends RuntimeException {
+    private final Long conflictId;
+    private final OffsetDateTime startTime;
+    private final String carBrand;
 
-    public ConflictException(String message) {
+    public ConflictException(String message, Long conflictId, OffsetDateTime start, String brand) {
         super(message);
+        this.conflictId = conflictId;
+        this.startTime = start;
+        this.carBrand = brand;
     }
 }

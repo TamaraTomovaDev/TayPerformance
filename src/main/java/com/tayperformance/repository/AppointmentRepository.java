@@ -1,64 +1,32 @@
 package com.tayperformance.repository;
 
 import com.tayperformance.entity.Appointment;
-import com.tayperformance.entity.AppointmentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDateTime;
+import jakarta.persistence.LockModeType;
+import java.time.OffsetDateTime; // Zorg dat je de juiste import hebt
 import java.util.List;
 
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
 
-    /**
-     * CONFLICT CHECK (NIEUWE AFSPRAAK)
-     * Controleert of er een overlappende afspraak bestaat
-     * die NIET geannuleerd is.
-     * Regel:
-     * bestaand.start < nieuw.einde
-     * EN
-     * bestaand.einde > nieuw.start
-     */
-    boolean existsByStartTimeLessThanAndEndTimeGreaterThanAndStatusNot(
-            LocalDateTime endTime,
-            LocalDateTime startTime,
-            AppointmentStatus status
-    );
-
-    /**
-     * CONFLICT CHECK (BESTAANDE AFSPRAAK WIJZIGEN)
-     * Zelfde als hierboven, maar sluit de huidige afspraak uit
-     * (belangrijk bij edit).
-     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
-        SELECT COUNT(a) > 0
+        SELECT a
         FROM Appointment a
-        WHERE a.id <> :appointmentId
-          AND a.status <> :status
+        WHERE a.status <> 'CANCELED'
           AND a.startTime < :endTime
           AND a.endTime > :startTime
     """)
-    boolean existsConflictExcludingAppointment(
-            @Param("appointmentId") Long appointmentId,
-            @Param("startTime") LocalDateTime startTime,
-            @Param("endTime") LocalDateTime endTime,
-            @Param("status") AppointmentStatus status
+    List<Appointment> findConflictingAppointments(
+            @Param("startTime") OffsetDateTime startTime, // Veranderd naar OffsetDateTime
+            @Param("endTime") OffsetDateTime endTime     // Veranderd naar OffsetDateTime
     );
 
-    /**
-     * DAGOVERZICHT
-     * Alle afspraken voor één dag (kalender)
-     */
+    // Vergeet deze ook niet aan te passen naar OffsetDateTime
     List<Appointment> findAllByStartTimeBetweenOrderByStartTimeAsc(
-            LocalDateTime dayStart,
-            LocalDateTime dayEnd
-    );
-
-    /**
-     * TOEKOMSTIGE AFSPRAKEN (optioneel)
-     */
-    List<Appointment> findAllByStartTimeAfterOrderByStartTimeAsc(
-            LocalDateTime from
+            OffsetDateTime start, OffsetDateTime end
     );
 }

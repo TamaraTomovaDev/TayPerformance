@@ -6,37 +6,43 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Handelt alle exceptions centraal af voor de hele app
- */
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
-    // ConflictException → 409
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<Object> handleConflictException(ConflictException ex) {
-        return buildResponse(HttpStatus.CONFLICT, ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("timestamp", LocalDateTime.now(ZoneOffset.UTC));
+        body.put("status", HttpStatus.CONFLICT.value());
+        body.put("error", HttpStatus.CONFLICT.getReasonPhrase());
+        body.put("message", ex.getMessage());
+
+        body.put("conflict", Map.of(
+                "appointmentId", ex.getConflictId(),
+                "startTime", ex.getStartTime(),
+                "carBrand", ex.getCarBrand()
+        ));
+
+        return new ResponseEntity<>(body, HttpStatus.CONFLICT);
     }
 
-    // IllegalArgumentException → 400
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Object> handleBadRequest(IllegalArgumentException ex) {
         return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
-    // Alle overige exceptions → 500
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Object> handleAllExceptions(Exception ex) {
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Er is iets misgegaan");
     }
 
-    // Helper methode
     private ResponseEntity<Object> buildResponse(HttpStatus status, String message) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("timestamp", LocalDateTime.now());
+        body.put("timestamp", LocalDateTime.now(ZoneOffset.UTC));
         body.put("status", status.value());
         body.put("error", status.getReasonPhrase());
         body.put("message", message);
