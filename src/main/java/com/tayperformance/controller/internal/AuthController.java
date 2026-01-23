@@ -3,6 +3,8 @@ package com.tayperformance.controller.internal;
 import com.tayperformance.config.JwtProvider;
 import com.tayperformance.dto.auth.JwtResponse;
 import com.tayperformance.dto.auth.LoginRequest;
+import com.tayperformance.dto.auth.RegisterRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +22,7 @@ public class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final JwtProvider jwtProvider;
+    private final AuthService authService; // <<<<< Voeg dit toe
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
@@ -35,5 +38,14 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Ongeldige login");
         }
     }
-}
 
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@RequestBody @Valid RegisterRequest request) {
+        try {
+            var user = authService.register(request);
+            return ResponseEntity.status(201).body("Gebruiker aangemaakt: " + user.getUsername());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(409).body(e.getMessage());
+        }
+    }
+}
