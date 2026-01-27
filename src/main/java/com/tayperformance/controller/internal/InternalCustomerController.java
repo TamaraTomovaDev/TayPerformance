@@ -8,13 +8,10 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * Interne API voor klantenbeheer (garage).
- */
 @RestController
 @RequestMapping("/api/internal/customers")
 @RequiredArgsConstructor
-public class CustomerController {
+public class InternalCustomerController {
 
     private final CustomerService customerService;
 

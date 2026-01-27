@@ -46,7 +46,7 @@ public class CustomerService {
                 .id(customer.getId())
                 .firstName(customer.getFirstName())
                 .phone(customer.getPhone())
-                .active(customer.getActive())
+                .active(customer.isActive())
                 .build();
     }
 }

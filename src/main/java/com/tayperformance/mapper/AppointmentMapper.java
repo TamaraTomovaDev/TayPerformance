@@ -5,44 +5,32 @@ import com.tayperformance.entity.Appointment;
 
 public class AppointmentMapper {
 
-    private AppointmentMapper() {
-        // voorkomt instantiatie
-    }
+    private AppointmentMapper() {}
 
-    public static AppointmentResponse toResponse(Appointment appointment) {
-        if (appointment == null) {
-            return null;
-        }
+    public static AppointmentResponse toResponse(Appointment a) {
+        if (a == null) return null;
 
         return AppointmentResponse.builder()
-                .id(appointment.getId())
+                .id(a.getId())
 
-                // Customer
-                .customerName(
-                        appointment.getCustomer() != null
-                                ? appointment.getCustomer().getFirstName()
-                                : null
-                )
-                .customerPhone(
-                        appointment.getCustomer() != null
-                                ? appointment.getCustomer().getPhone()
-                                : null
-                )
+                .customerName(a.getCustomer() != null ? a.getCustomer().getFirstName() : null)
+                .customerPhone(a.getCustomer() != null ? a.getCustomer().getPhone() : null)
 
-                // Car
-                .carBrand(appointment.getCarBrand())
-                .carModel(appointment.getCarModel())
+                .serviceId(a.getService() != null ? a.getService().getId() : null)
+                .serviceName(a.getService() != null ? a.getService().getName() : null)
 
-                // Appointment
-                .description(appointment.getDescription())
-                .price(appointment.getPrice())
-                .startTime(appointment.getStartTime())
-                .endTime(appointment.getEndTime())
-                .status(appointment.getStatus())
+                .carBrand(a.getCarBrand())
+                .carModel(a.getCarModel())
 
-                // Audit
-                .createdAt(appointment.getCreatedAt())
+                .description(a.getDescription())
+                .price(a.getPrice())
+                .startTime(a.getStartTime())
+                .endTime(a.getEndTime())
+                .durationMinutes(a.getDurationMinutes())
+                .status(a.getStatus())
 
+                .createdAt(a.getCreatedAt())
+                .updatedAt(a.getUpdatedAt())
                 .build();
     }
 }

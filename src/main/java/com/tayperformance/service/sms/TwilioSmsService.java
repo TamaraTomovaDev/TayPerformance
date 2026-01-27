@@ -2,6 +2,7 @@ package com.tayperformance.service.sms;
 
 import com.tayperformance.entity.Appointment;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -9,29 +10,26 @@ import org.springframework.stereotype.Service;
 @Service
 public class TwilioSmsService implements SmsService {
 
-    // В 2026 году лучше выносить тексты сообщений в конфиг или базу
-    private static final String ADDRESS = "Straatnaam 123, 1000 Brussel";
+    @Value("${tay.garage.address:Straatnaam 123, 1000 Brussel}")
+    private String address;
 
-    @Async // Это позволяет методу выполняться в фоновом потоке
+    @Async
     @Override
     public void sendConfirmation(Appointment appointment) {
         String phone = appointment.getCustomer().getPhone();
+
         String message = String.format(
-                "Bevestiging Tay Performance: Je afspraak staat gepland op %s voor je %s. Adres: %s.",
-                appointment.getStartTime().toString(), // Здесь можно отформатировать дату покрасивее
+                "Tay Performance bevestiging: afspraak op %s voor %s. Adres: %s.",
+                appointment.getStartTime(),
                 appointment.getCarBrand(),
-                ADDRESS
+                address
         );
 
         try {
-            // Имитация вызова внешнего API (Twilio, MessageBird и т.д.)
-            log.info("Verzenden SMS naar {}: {}", phone, message);
-
-            // Здесь будет реальный код:
-            // twilioClient.messages.create(new PhoneNumber(phone), ...)
-
+            log.info("SMS bevestiging -> {}: {}", phone, message);
+            // TODO: echte provider call (Twilio/MessageBird)
         } catch (Exception e) {
-            log.error("Fout bij verzenden SMS naar {}", phone, e);
+            log.error("Fout bij verzenden SMS bevestiging naar {}", phone, e);
         }
     }
 
@@ -39,8 +37,12 @@ public class TwilioSmsService implements SmsService {
     @Override
     public void sendCancellation(Appointment appointment) {
         String phone = appointment.getCustomer().getPhone();
-        String message = "Tay Performance: Je afspraak op " + appointment.getStartTime() + " is geannuleerd.";
+        String message = "Tay Performance: je afspraak op " + appointment.getStartTime() + " is geannuleerd.";
 
-        log.info("Verzenden annulatie SMS naar {}: {}", phone, message);
+        try {
+            log.info("SMS annulatie -> {}: {}", phone, message);
+        } catch (Exception e) {
+            log.error("Fout bij verzenden SMS annulatie naar {}", phone, e);
+        }
     }
 }

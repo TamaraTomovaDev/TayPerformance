@@ -1,3 +1,4 @@
+// src/main/java/com/tayperformance/dto/appointment/AppointmentResponse.java
 package com.tayperformance.dto.appointment;
 
 import com.tayperformance.entity.AppointmentStatus;
@@ -17,6 +18,10 @@ public class AppointmentResponse {
     private String customerName;
     private String customerPhone;
 
+    // Service
+    private Long serviceId;
+    private String serviceName;
+
     // Car
     private String carBrand;
     private String carModel;
@@ -26,8 +31,10 @@ public class AppointmentResponse {
     private BigDecimal price;
     private OffsetDateTime startTime;
     private OffsetDateTime endTime;
+    private Integer durationMinutes;
     private AppointmentStatus status;
 
     // Audit
     private OffsetDateTime createdAt;
+    private OffsetDateTime updatedAt;
 }

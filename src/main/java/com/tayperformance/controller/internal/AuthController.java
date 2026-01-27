@@ -4,16 +4,15 @@ import com.tayperformance.config.JwtProvider;
 import com.tayperformance.dto.auth.JwtResponse;
 import com.tayperformance.dto.auth.LoginRequest;
 import com.tayperformance.dto.auth.RegisterRequest;
+import com.tayperformance.service.auth.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -22,20 +21,18 @@ public class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final JwtProvider jwtProvider;
-    private final AuthService authService; // <<<<< Voeg dit toe
+    private final AuthService authService;
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<?> login(@RequestBody @Valid LoginRequest request) {
         try {
-            var auth = authenticationManager.authenticate(
+            authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
             );
-
             String token = jwtProvider.generateToken(request.getUsername());
             return ResponseEntity.ok(new JwtResponse(token));
-
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Ongeldige login");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Ongeldige login"));
         }
     }
 
@@ -43,9 +40,10 @@ public class AuthController {
     public ResponseEntity<?> register(@RequestBody @Valid RegisterRequest request) {
         try {
             var user = authService.register(request);
-            return ResponseEntity.status(201).body("Gebruiker aangemaakt: " + user.getUsername());
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(Map.of("message", "Gebruiker aangemaakt", "username", user.getUsername()));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(409).body(e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 }

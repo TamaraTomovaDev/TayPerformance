@@ -1,4 +1,4 @@
-// src/main/java/com/tayperformance/entity/Customer.java
+// src/main/java/com/tayperformance/entity/DetailService.java
 package com.tayperformance.entity;
 
 import jakarta.persistence.*;
@@ -7,20 +7,19 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @Entity
 @Table(
-        name = "customers",
+        name = "services",
         indexes = {
-                @Index(name = "idx_customers_phone", columnList = "phone")
+                @Index(name = "idx_services_active", columnList = "active"),
+                @Index(name = "idx_services_name", columnList = "name")
         }
 )
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor
 @Builder
-public class Customer {
+public class DetailService {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -29,14 +28,20 @@ public class Customer {
     @Version
     private Long version;
 
-    @Column(unique = true, nullable = false, length = 30)
-    private String phone;
+    @Column(nullable = false, length = 120)
+    private String name;
 
-    @Column(name = "first_name", length = 80)
-    private String firstName;
+    @Column(columnDefinition = "TEXT")
+    private String description;
 
-    @Column(name = "last_name", length = 80)
-    private String lastName;
+    @Column(name = "min_minutes", nullable = false)
+    private Integer minMinutes;
+
+    @Column(name = "max_minutes", nullable = false)
+    private Integer maxMinutes;
+
+    @Column(name = "default_minutes", nullable = false)
+    private Integer defaultMinutes;
 
     @Builder.Default
     @Column(nullable = false)
@@ -49,8 +54,4 @@ public class Customer {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
-
-    @Builder.Default
-    @OneToMany(mappedBy = "customer", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Appointment> appointments = new ArrayList<>();
 }

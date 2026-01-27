@@ -1,8 +1,10 @@
 package com.tayperformance.entity;
 
 public enum AppointmentStatus {
-    CONFIRMED,
-    CANCELED,
-    COMPLETED,
-    NOSHOW
+    REQUESTED,     // klant heeft aangevraagd (website)
+    CONFIRMED,     // staff/admin heeft bevestigd
+    RESCHEDULED,   // verplaatst
+    CANCELED,      // geannuleerd
+    COMPLETED,     // afgewerkt
+    NOSHOW         // niet komen opdagen
 }
