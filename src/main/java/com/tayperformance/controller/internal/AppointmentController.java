@@ -14,10 +14,10 @@ import org.springframework.web.bind.annotation.*;
 import java.time.OffsetDateTime;
 import java.util.List;
 
-@RestController
+@RestController("internalAppointmentController")
 @RequestMapping("/api/internal/appointments")
 @RequiredArgsConstructor
-public class InternalAppointmentController {
+public class AppointmentController {
 
     private final AppointmentService appointmentService;
 

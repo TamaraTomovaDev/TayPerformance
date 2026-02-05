@@ -12,7 +12,7 @@ import java.util.List;
 @RequestMapping("/api/public/services")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-public class PublicServiceController {
+public class ServiceController {
 
     private final ServiceRepository serviceRepository;
 

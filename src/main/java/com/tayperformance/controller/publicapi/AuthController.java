@@ -1,4 +1,4 @@
-package com.tayperformance.controller.internal;
+package com.tayperformance.controller.publicapi;
 
 import com.tayperformance.config.JwtProvider;
 import com.tayperformance.dto.auth.JwtResponse;
@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/public/auth")
 @RequiredArgsConstructor
 public class AuthController {
 

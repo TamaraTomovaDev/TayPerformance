@@ -8,11 +8,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 
-@RestController
+@RestController("publicAppointmentController")
 @RequestMapping("/api/public/appointments")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-public class PublicAppointmentController {
+public class AppointmentController {
 
     private final AppointmentService appointmentService;
 
