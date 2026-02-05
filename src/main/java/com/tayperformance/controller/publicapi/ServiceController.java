@@ -2,7 +2,7 @@
 package com.tayperformance.controller.publicapi;
 
 import com.tayperformance.entity.DetailService;
-import com.tayperformance.repository.ServiceRepository;
+import com.tayperformance.repository.DetailServiceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,7 +14,7 @@ import java.util.List;
 @CrossOrigin(origins = "*")
 public class ServiceController {
 
-    private final ServiceRepository serviceRepository;
+    private final DetailServiceRepository serviceRepository;
 
     @GetMapping
     public List<DetailService> listActive() {

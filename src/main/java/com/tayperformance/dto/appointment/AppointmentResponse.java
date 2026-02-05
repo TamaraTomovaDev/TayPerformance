@@ -1,4 +1,3 @@
-// src/main/java/com/tayperformance/dto/appointment/AppointmentResponse.java
 package com.tayperformance.dto.appointment;
 
 import com.tayperformance.entity.AppointmentStatus;
