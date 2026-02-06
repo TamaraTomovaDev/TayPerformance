@@ -6,8 +6,7 @@ import java.time.OffsetDateTime;
 
 @Data
 @Builder
-public class CustomerDto {
-
+public class CustomerResponse {
     private Long id;
     private String phone;
     private String firstName;

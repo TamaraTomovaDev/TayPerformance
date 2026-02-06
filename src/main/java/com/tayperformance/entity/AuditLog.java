@@ -191,10 +191,7 @@ public class AuditLog {
      */
     @PrePersist
     private void setExpiryDate() {
-        if (expiresAt == null && createdAt != null) {
-            this.expiresAt = createdAt.plusDays(90);
-        } else if (expiresAt == null) {
-            // Fallback als createdAt nog niet gezet is
+        if (expiresAt == null) {
             this.expiresAt = OffsetDateTime.now().plusDays(90);
         }
     }

@@ -1,6 +1,6 @@
 package com.tayperformance.service.auth;
 
-import com.tayperformance.dto.auth.RegisterRequest;
+import com.tayperformance.dto.auth.CreateUserRequest;
 import com.tayperformance.entity.Role;
 import com.tayperformance.entity.User;
 import com.tayperformance.exception.BadRequestException;
@@ -35,7 +35,7 @@ public class AuthService {
      * - Geldige rol
      */
     @Transactional
-    public User register(RegisterRequest request) {
+    public User register(CreateUserRequest request) {
         validateRegistrationRequest(request);
 
         if (userRepository.existsByUsername(request.getUsername())) {
@@ -136,7 +136,7 @@ public class AuthService {
     // VALIDATION HELPERS
     // ============================================================
 
-    private void validateRegistrationRequest(RegisterRequest request) {
+    private void validateRegistrationRequest(CreateUserRequest request) {
         if (request.getUsername() == null || request.getUsername().isBlank()) {
             throw new BadRequestException("Gebruikersnaam is verplicht");
         }

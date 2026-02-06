@@ -7,33 +7,28 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
+/**
+ * Response DTO voor alle appointment endpoints.
+ */
 @Data
 @Builder
 public class AppointmentResponse {
-
     private Long id;
-
-    // Customer
+    private Long customerId;
     private String customerName;
     private String customerPhone;
-
-    // Service
     private Long serviceId;
     private String serviceName;
-
-    // Car
+    private Long assignedStaffId;
+    private String assignedStaffName;
     private String carBrand;
     private String carModel;
-
-    // Appointment
     private String description;
     private BigDecimal price;
     private OffsetDateTime startTime;
     private OffsetDateTime endTime;
     private Integer durationMinutes;
     private AppointmentStatus status;
-
-    // Audit
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 }

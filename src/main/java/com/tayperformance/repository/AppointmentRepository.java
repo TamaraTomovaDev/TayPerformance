@@ -2,6 +2,9 @@ package com.tayperformance.repository;
 
 import com.tayperformance.entity.Appointment;
 import com.tayperformance.entity.AppointmentStatus;
+import com.tayperformance.dto.projection.ServiceDuration;
+import com.tayperformance.dto.projection.ServicePopularity;
+import com.tayperformance.dto.projection.StatusCount;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,11 +14,9 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Repository voor Appointment entiteit.
- * Bevat queries voor conflict detectie, kalender, analytics en archivering.
  */
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
 
@@ -23,10 +24,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     // CONFLICT DETECTIE
     // ============================================================
 
-    /**
-     * Vindt overlappende afspraken voor dubbele boeking preventie.
-     * Overlap = (start1 < end2) AND (end1 > start2)
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE a.status IN :statuses
@@ -48,9 +45,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     // KALENDER QUERIES
     // ============================================================
 
-    /**
-     * Afspraken in periode (week/maand view).
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE a.startTime >= :start
@@ -62,10 +56,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             @Param("end") OffsetDateTime end
     );
 
-    /**
-     * Afspraken voor specifieke dag.
-     * Service layer: dayStart = date.atStartOfDay(zoneId)
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE a.startTime >= :dayStart
@@ -77,9 +67,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             @Param("dayEnd") OffsetDateTime dayEnd
     );
 
-    /**
-     * Afspraken voor specifieke staff member in periode.
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE a.assignedStaff.id = :staffId
@@ -93,9 +80,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             @Param("end") OffsetDateTime end
     );
 
-    /**
-     * Afspraken vandaag voor dashboard.
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE a.startTime >= :todayStart
@@ -113,12 +97,8 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     // ============================================================
 
     List<Appointment> findAllByStatusOrderByStartTimeDesc(AppointmentStatus status);
-
     List<Appointment> findAllByStatusInOrderByStartTimeDesc(List<AppointmentStatus> statuses);
 
-    /**
-     * Pending confirmations voor dashboard alert.
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE a.status = 'REQUESTED'
@@ -126,9 +106,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     """)
     List<Appointment> findPendingConfirmation();
 
-    /**
-     * Status statistieken voor rapportage.
-     */
     @Query("""
         SELECT a.status as status, COUNT(a) as count
         FROM Appointment a
@@ -145,14 +122,8 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     // KLANTGESCHIEDENIS
     // ============================================================
 
-    /**
-     * Alle afspraken van klant (voor history view).
-     */
     List<Appointment> findAllByCustomerIdOrderByStartTimeDesc(Long customerId);
 
-    /**
-     * Completed afspraken sinds datum (voor loyaliteit berekening).
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE a.customer.id = :customerId
@@ -165,9 +136,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             @Param("since") OffsetDateTime since
     );
 
-    /**
-     * Tel completed afspraken (loyaliteitskorting na 4 afspraken).
-     */
     @Query("""
         SELECT COUNT(a) FROM Appointment a
         WHERE a.customer.id = :customerId
@@ -175,9 +143,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     """)
     long countCompletedByCustomer(@Param("customerId") Long customerId);
 
-    /**
-     * Tel no-shows (voor klant blocking na 3 no-shows).
-     */
     @Query("""
         SELECT COUNT(a) FROM Appointment a
         WHERE a.customer.id = :customerId
@@ -193,10 +158,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     // SMS REMINDERS
     // ============================================================
 
-    /**
-     * Afspraken die reminder nodig hebben (batch job).
-     * Window = typically 23-25 uur voor afspraak.
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE a.status = 'CONFIRMED'
@@ -213,9 +174,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     // ANALYTICS
     // ============================================================
 
-    /**
-     * Completed afspraken met prijs voor omzet rapportage.
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE a.status = 'COMPLETED'
@@ -229,9 +187,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             @Param("endDate") OffsetDateTime endDate
     );
 
-    /**
-     * Totale omzet berekening (BigDecimal voor nauwkeurigheid).
-     */
     @Query("""
         SELECT COALESCE(SUM(a.price), 0)
         FROM Appointment a
@@ -245,9 +200,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             @Param("endDate") OffsetDateTime endDate
     );
 
-    /**
-     * Meest populaire services voor rapportage.
-     */
     @Query("""
         SELECT s.name as serviceName, COUNT(a) as appointmentCount
         FROM Appointment a
@@ -263,19 +215,17 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             @Param("endDate") OffsetDateTime endDate
     );
 
-    /**
-     * Gemiddelde duur per service voor planning optimalisatie.
-     */
     @Query("""
-        SELECT s.name as serviceName, AVG(EXTRACT(EPOCH FROM (a.endTime - a.startTime))/60) as avgMinutes
-        FROM Appointment a
-        JOIN a.service s
-        WHERE a.status = 'COMPLETED'
-          AND a.startTime >= :startDate
-          AND a.startTime < :endDate
-        GROUP BY s.name
-        ORDER BY AVG(EXTRACT(EPOCH FROM (a.endTime - a.startTime))/60) DESC
-    """)
+    SELECT s.name AS serviceName,
+           AVG(timestampdiff(MINUTE, a.startTime, a.endTime)) AS avgMinutes
+    FROM Appointment a
+    JOIN a.service s
+    WHERE a.status = 'COMPLETED'
+      AND a.startTime >= :startDate
+      AND a.startTime < :endDate
+    GROUP BY s.name
+    ORDER BY avgMinutes DESC
+   """)
     List<ServiceDuration> calculateAverageDurationByService(
             @Param("startDate") OffsetDateTime startDate,
             @Param("endDate") OffsetDateTime endDate
@@ -287,9 +237,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     Page<Appointment> findAllByOrderByStartTimeDesc(Pageable pageable);
 
-    /**
-     * Zoek afspraken op klantgegevens.
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE LOWER(a.customer.phone) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
@@ -302,9 +249,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             Pageable pageable
     );
 
-    /**
-     * Zoek afspraken op auto merk/model.
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE LOWER(a.carBrand) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
@@ -320,10 +264,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     // ONDERHOUD / ARCHIVERING
     // ============================================================
 
-    /**
-     * Oude afspraken voor archivering (batch processing met paginering).
-     * Typisch: cutoffDate = now().minusMonths(12)
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE a.startTime < :cutoffDate
@@ -335,9 +275,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             Pageable pageable
     );
 
-    /**
-     * Vind upcoming afspraken zonder toegewezen staff.
-     */
     @Query("""
         SELECT a FROM Appointment a
         WHERE a.assignedStaff IS NULL
@@ -346,23 +283,4 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
         ORDER BY a.startTime ASC
     """)
     List<Appointment> findUnassignedUpcoming(@Param("now") OffsetDateTime now);
-}
-
-// ============================================================
-// PROJECTION INTERFACES
-// ============================================================
-
-interface StatusCount {
-    AppointmentStatus getStatus();
-    Long getCount();
-}
-
-interface ServicePopularity {
-    String getServiceName();
-    Long getAppointmentCount();
-}
-
-interface ServiceDuration {
-    String getServiceName();
-    Double getAvgMinutes();
 }

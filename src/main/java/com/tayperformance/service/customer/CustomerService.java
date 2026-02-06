@@ -1,11 +1,12 @@
 package com.tayperformance.service.customer;
 
 import com.tayperformance.dto.customer.CreateCustomerRequest;
-import com.tayperformance.dto.customer.CustomerDto;
+import com.tayperformance.dto.customer.CustomerResponse;
 import com.tayperformance.dto.customer.UpdateCustomerRequest;
 import com.tayperformance.entity.Customer;
 import com.tayperformance.exception.BadRequestException;
 import com.tayperformance.exception.NotFoundException;
+import com.tayperformance.mapper.CustomerMapper;
 import com.tayperformance.repository.AppointmentRepository;
 import com.tayperformance.repository.CustomerRepository;
 import com.tayperformance.util.PhoneNumberHelper;
@@ -13,7 +14,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,13 +25,14 @@ import java.util.List;
  * Service voor klantbeheer.
  * Handles: CRUD, zoeken, loyaliteit, GDPR compliance.
  */
-@Slf4j
 @Service
+@Transactional
 @RequiredArgsConstructor
+@Slf4j
 public class CustomerService {
 
-    private final CustomerRepository customerRepository;
-    private final AppointmentRepository appointmentRepository;
+    private final CustomerRepository customerRepo;
+    private final AppointmentRepository appointmentRepo;
 
     @Value("${tay.phone.default-country:BE}")
     private String defaultCountry;
@@ -40,305 +41,139 @@ public class CustomerService {
     private int loyaltyThreshold;
 
     // ============================================================
-    // CRUD OPERATIONS
+    // CREATE
     // ============================================================
 
-    /**
-     * Maak nieuwe klant aan.
-     */
-    @Transactional
-    public CustomerDto create(CreateCustomerRequest request) {
-        String phone = normalizePhoneOrThrow(request.getPhone());
+    public CustomerResponse create(CreateCustomerRequest req) {
+        String phone = normalizePhone(req.getPhone());
 
-        if (customerRepository.existsByPhone(phone)) {
-            throw new BadRequestException("Klant met dit telefoonnummer bestaat al");
+        if (customerRepo.existsByPhone(phone)) {
+            throw new BadRequestException("Telefoonnummer bestaat al");
         }
 
         Customer customer = Customer.builder()
                 .phone(phone)
-                .firstName(trimOrNull(request.getFirstName()))
-                .lastName(trimOrNull(request.getLastName()))
+                .firstName(trim(req.getFirstName()))
+                .lastName(trim(req.getLastName()))
                 .active(true)
                 .build();
 
-        Customer saved = customerRepository.save(customer);
+        customer = customerRepo.save(customer);
 
-        log.info("Created customer id={} phone={}", saved.getId(), saved.getPhone());
-
-        return toDto(saved);
+        log.info("Created customer {}", customer.getId());
+        return CustomerMapper.toResponse(customer);
     }
 
-    /**
-     * Update klantgegevens.
-     */
-    @Transactional
-    public CustomerDto update(Long id, UpdateCustomerRequest request) {
-        Customer customer = loadCustomerOrThrow(id);
+    // ============================================================
+    // UPDATE
+    // ============================================================
 
-        if (request.getFirstName() != null) {
-            customer.setFirstName(trimOrNull(request.getFirstName()));
-        }
-        if (request.getLastName() != null) {
-            customer.setLastName(trimOrNull(request.getLastName()));
-        }
+    public CustomerResponse update(Long id, UpdateCustomerRequest req) {
+        Customer c = load(id);
 
-        Customer saved = customerRepository.save(customer);
+        if (req.getFirstName() != null) c.setFirstName(trim(req.getFirstName()));
+        if (req.getLastName() != null) c.setLastName(trim(req.getLastName()));
 
-        log.info("Updated customer id={}", saved.getId());
+        c = customerRepo.save(c);
 
-        return toDto(saved);
+        log.info("Updated customer {}", id);
+        return CustomerMapper.toResponse(c);
     }
 
-    /**
-     * Soft delete klant (GDPR: recht op vergetelheid).
-     * Afspraken blijven behouden voor audit trail.
-     */
-    @Transactional
+    // ============================================================
+    // ACTIVE / INACTIVE
+    // ============================================================
+
     public void deactivate(Long id) {
-        Customer customer = loadCustomerOrThrow(id);
+        Customer c = load(id);
+        if (!c.isActive()) return;
 
-        if (!customer.isActive()) {
-            return; // idempotent
-        }
+        c.setActive(false);
+        customerRepo.save(c);
 
-        customer.setActive(false);
-        customerRepository.save(customer);
-
-        log.info("Deactivated customer id={} phone={}", customer.getId(), customer.getPhone());
+        log.info("Deactivated customer {}", id);
     }
 
-    /**
-     * Heractiveer klant.
-     */
-    @Transactional
     public void reactivate(Long id) {
-        Customer customer = customerRepository.findById(id)
-                .orElseThrow(() -> NotFoundException.of("Customer", id));
+        Customer c = load(id);
+        if (c.isActive()) return;
 
-        if (customer.isActive()) {
-            return; // idempotent
+        c.setActive(true);
+        customerRepo.save(c);
+
+        log.info("Reactivated customer {}", id);
+    }
+
+    // ============================================================
+    // READ
+    // ============================================================
+
+    @Transactional(readOnly = true)
+    public CustomerResponse getById(Long id) {
+        return CustomerMapper.toResponse(load(id));
+    }
+
+    @Transactional(readOnly = true)
+    public CustomerResponse getByPhone(String phone) {
+        String normalized = normalizePhone(phone);
+
+        Customer c = customerRepo.findByPhoneAndActiveTrue(normalized)
+                .orElseThrow(() -> new NotFoundException("Klant niet gevonden"));
+
+        return CustomerMapper.toResponse(c);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CustomerResponse> search(String q, Pageable pageable) {
+        if (q == null || q.isBlank()) {
+            return customerRepo.findAllByActiveTrueOrderByFirstNameAsc(pageable)
+                    .map(CustomerMapper::toResponse);
         }
 
-        customer.setActive(true);
-        customerRepository.save(customer);
-
-        log.info("Reactivated customer id={}", customer.getId());
+        return customerRepo.searchActive(q.trim(), pageable)
+                .map(CustomerMapper::toResponse);
     }
 
     // ============================================================
-    // QUERIES
+    // LOYALTY & STATS
     // ============================================================
 
     @Transactional(readOnly = true)
-    public CustomerDto getById(Long id) {
-        Customer customer = loadCustomerOrThrow(id);
-        return toDto(customer);
-    }
-
-    @Transactional(readOnly = true)
-    public CustomerDto getByPhone(String phone) {
-        String normalized = normalizePhoneOrThrow(phone);
-
-        Customer customer = customerRepository.findByPhoneAndActiveTrue(normalized)
-                .orElseThrow(() -> new NotFoundException(
-                        "Actieve klant niet gevonden met telefoon: " + phone
-                ));
-
-        return toDto(customer);
-    }
-
-    @Transactional(readOnly = true)
-    public List<CustomerDto> getAllActive() {
-        return customerRepository.findAllByActiveTrueOrderByFirstNameAsc()
-                .stream()
-                .map(this::toDto)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public Page<CustomerDto> getAllActive(Pageable pageable) {
-        return customerRepository.findAllByActiveTrueOrderByFirstNameAsc(pageable)
-                .map(this::toDto);
-    }
-
-    @Transactional(readOnly = true)
-    public List<CustomerDto> search(String searchTerm) {
-        if (searchTerm == null || searchTerm.isBlank()) {
-            return getAllActive();
-        }
-
-        return customerRepository.searchActive(searchTerm.trim())
-                .stream()
-                .map(this::toDto)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public Page<CustomerDto> search(String searchTerm, Pageable pageable) {
-        if (searchTerm == null || searchTerm.isBlank()) {
-            return getAllActive(pageable);
-        }
-
-        return customerRepository.searchActive(searchTerm.trim(), pageable)
-                .map(this::toDto);
+    public boolean isLoyal(Long id) {
+        return appointmentRepo.countCompletedByCustomer(id) >= loyaltyThreshold;
     }
 
     // ============================================================
-    // ANALYTICS & LOYALTY
+    // GDPR
     // ============================================================
 
-    /**
-     * Top klanten (meeste afspraken).
-     */
-    @Transactional(readOnly = true)
-    public List<CustomerDto> getTopCustomers(int limit) {
-        Pageable pageable = PageRequest.of(0, limit);
-
-        return customerRepository.findTopCustomers(pageable)
-                .stream()
-                .map(this::toDto)
-                .toList();
-    }
-
-    /**
-     * Loyale klanten (≥4 completed afspraken).
-     */
-    @Transactional(readOnly = true)
-    public List<CustomerDto> getLoyalCustomers() {
-        return customerRepository.findLoyalCustomers(loyaltyThreshold)
-                .stream()
-                .map(this::toDto)
-                .toList();
-    }
-
-    /**
-     * Check of klant loyaliteitskorting verdient.
-     */
-    @Transactional(readOnly = true)
-    public boolean isLoyalCustomer(Long customerId) {
-        long completedCount = appointmentRepository.countCompletedByCustomer(customerId);
-        return completedCount >= loyaltyThreshold;
-    }
-
-    /**
-     * Inactieve klanten (geen afspraken sinds X maanden).
-     */
-    @Transactional(readOnly = true)
-    public List<CustomerDto> getInactiveSince(int months) {
-        OffsetDateTime cutoff = OffsetDateTime.now().minusMonths(months);
-
-        return customerRepository.findInactiveSince(cutoff)
-                .stream()
-                .map(this::toDto)
-                .toList();
-    }
-
-    /**
-     * Klanten met meerdere no-shows (voor blocking).
-     */
-    @Transactional(readOnly = true)
-    public List<CustomerDto> getProblematicCustomers(int minNoShows, int months) {
-        OffsetDateTime since = OffsetDateTime.now().minusMonths(months);
-
-        return customerRepository.findWithMultipleNoShows(since, minNoShows)
-                .stream()
-                .map(this::toDto)
-                .toList();
-    }
-
-    /**
-     * Check of klant geblokkeerd moet worden (3+ no-shows).
-     */
-    @Transactional(readOnly = true)
-    public boolean shouldBlock(Long customerId) {
-        OffsetDateTime since = OffsetDateTime.now().minusMonths(6);
-        long noShowCount = appointmentRepository.countNoShowsByCustomerSince(customerId, since);
-        return noShowCount >= 3;
-    }
-
-    // ============================================================
-    // GDPR COMPLIANCE
-    // ============================================================
-
-    /**
-     * Klanten zonder afspraken (kandidaten voor verwijdering).
-     */
-    @Transactional(readOnly = true)
-    public List<CustomerDto> getCustomersWithoutAppointments(int months) {
-        OffsetDateTime cutoff = OffsetDateTime.now().minusMonths(months);
-
-        return customerRepository.findWithoutAppointmentsBefore(cutoff)
-                .stream()
-                .map(this::toDto)
-                .toList();
-    }
-
-    /**
-     * Hard delete klant (GDPR compliance).
-     * WAARSCHUWING: Verwijdert ook alle gerelateerde afspraken!
-     */
-    @Transactional
     public void hardDelete(Long id) {
-        Customer customer = customerRepository.findById(id)
-                .orElseThrow(() -> NotFoundException.of("Customer", id));
+        Customer c = load(id);
 
-        // Extra veiligheid: check of klant al gedeactiveerd is
-        if (customer.isActive()) {
-            throw new BadRequestException(
-                    "Klant moet eerst gedeactiveerd worden. Hard delete alleen voor GDPR compliance."
-            );
+        if (c.isActive()) {
+            throw new BadRequestException("Deactiveer klant eerst");
         }
 
-        // Check of klant recent afspraken heeft
-        OffsetDateTime recentCutoff = OffsetDateTime.now().minusMonths(3);
-        boolean hasRecentAppointments = !appointmentRepository
-                .findCompletedByCustomerSince(id, recentCutoff)
-                .isEmpty();
-
-        if (hasRecentAppointments) {
-            throw new BadRequestException(
-                    "Klant heeft recente afspraken. Wacht minimaal 3 maanden na laatste afspraak."
-            );
-        }
-
-        customerRepository.delete(customer);
-
-        log.warn("HARD DELETED customer id={} phone={} (GDPR)", id, customer.getPhone());
+        customerRepo.delete(c);
+        log.warn("Hard-deleted customer {}", id);
     }
 
     // ============================================================
     // HELPERS
     // ============================================================
 
-    private Customer loadCustomerOrThrow(Long id) {
-        return customerRepository.findById(id)
+    private Customer load(Long id) {
+        return customerRepo.findById(id)
                 .orElseThrow(() -> NotFoundException.of("Customer", id));
     }
 
-    private String normalizePhoneOrThrow(String phone) {
+    private String normalizePhone(String phone) {
         String normalized = PhoneNumberHelper.normalize(phone, defaultCountry);
-        if (normalized == null) {
-            throw new BadRequestException("Ongeldig telefoonnummer: " + phone);
-        }
+        if (normalized == null) throw new BadRequestException("Ongeldig telefoonnummer");
         return normalized;
     }
 
-    private String trimOrNull(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
-    }
-
-    private CustomerDto toDto(Customer customer) {
-        return CustomerDto.builder()
-                .id(customer.getId())
-                .phone(customer.getPhone())
-                .firstName(customer.getFirstName())
-                .lastName(customer.getLastName())
-                .displayName(customer.getDisplayName())
-                .active(customer.isActive())
-                .createdAt(customer.getCreatedAt())
-                .build();
+    private String trim(String v) {
+        return (v == null || v.isBlank()) ? null : v.trim();
     }
 }

@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Data
-public class RegisterRequest {
+public class CreateUserRequest {
 
     @NotBlank(message = "Gebruikersnaam is verplicht")
     private String username;

@@ -3,7 +3,7 @@ package com.tayperformance.controller.publicapi;
 import com.tayperformance.config.JwtProvider;
 import com.tayperformance.dto.auth.JwtResponse;
 import com.tayperformance.dto.auth.LoginRequest;
-import com.tayperformance.dto.auth.RegisterRequest;
+import com.tayperformance.dto.auth.CreateUserRequest;
 import com.tayperformance.service.auth.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +37,7 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody @Valid RegisterRequest request) {
+    public ResponseEntity<?> register(@RequestBody @Valid CreateUserRequest request) {
         try {
             var user = authService.register(request);
             return ResponseEntity.status(HttpStatus.CREATED)
