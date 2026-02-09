@@ -1,7 +1,3 @@
-// ============================================================
-// REQUEST DTOs
-// ============================================================
-
 package com.tayperformance.dto.appointment;
 
 import jakarta.validation.constraints.*;
@@ -10,19 +6,18 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
-/**
- * Request DTO voor het aanmaken van afspraken.
- * Gebruikt door publieke website (REQUESTED) EN interne app (CONFIRMED).
- */
 @Data
 public class CreateAppointmentRequest {
 
-    // Verplicht voor beide flows
     @NotBlank(message = "Telefoonnummer is verplicht")
     private String customerPhone;
 
+    private String customerName;
+
     @NotBlank(message = "Automerk is verplicht")
     private String carBrand;
+
+    private String carModel;
 
     @NotBlank(message = "Omschrijving is verplicht")
     private String description;
@@ -30,11 +25,6 @@ public class CreateAppointmentRequest {
     @NotNull(message = "Starttijd is verplicht")
     @Future(message = "Starttijd moet in de toekomst liggen")
     private OffsetDateTime startTime;
-
-    // Optioneel (context afhankelijk)
-    private String customerName;
-    private String carModel;
-    private Long serviceId;
 
     @Positive(message = "Prijs moet positief zijn")
     private BigDecimal price;

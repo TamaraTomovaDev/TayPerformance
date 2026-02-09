@@ -1,4 +1,3 @@
-// src/main/java/com/tayperformance/controller/publicapi/PublicServiceController.java
 package com.tayperformance.controller.publicapi;
 
 import com.tayperformance.entity.DetailService;
@@ -11,13 +10,17 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/public/services")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
-public class ServiceController {
+public class PublicServiceController {
 
-    private final DetailServiceRepository serviceRepository;
+    private final DetailServiceRepository repo;
 
     @GetMapping
-    public List<DetailService> listActive() {
-        return serviceRepository.findAllByActiveTrueOrderByNameAsc();
+    public List<DetailService> list() {
+        return repo.findAll();
+    }
+
+    @GetMapping("/{id}")
+    public DetailService get(@PathVariable Long id) {
+        return repo.findById(id).orElseThrow(() -> new com.tayperformance.exception.NotFoundException("Service niet gevonden"));
     }
 }

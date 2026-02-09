@@ -10,19 +10,13 @@ import java.time.OffsetDateTime;
 public class AppointmentValidator {
 
     public void validateStartInFuture(OffsetDateTime start) {
-        if (start == null)
-            throw new BadRequestException("Starttijd is verplicht");
-
-        if (start.isBefore(OffsetDateTime.now()))
-            throw new BadRequestException("Afspraak moet in de toekomst liggen");
+        if (start == null) throw new BadRequestException("Starttijd is verplicht");
+        if (start.isBefore(OffsetDateTime.now())) throw new BadRequestException("Afspraak moet in de toekomst liggen");
     }
 
     public void validateDuration(Integer minutes) {
-        if (minutes == null || minutes <= 0)
-            throw new BadRequestException("Duur moet groter dan 0 zijn");
-
-        if (minutes > 480)
-            throw new BadRequestException("Duur mag niet langer dan 8 uur zijn");
+        if (minutes == null || minutes <= 0) throw new BadRequestException("Duur moet groter dan 0 zijn");
+        if (minutes > 480) throw new BadRequestException("Duur mag niet langer dan 8 uur zijn");
     }
 
     public void ensureModifiable(Appointment appt) {

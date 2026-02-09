@@ -8,96 +8,67 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/internal/appointments")
+@RequestMapping("/api/internal/appointments")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('ADMIN','STAFF')")
 public class InternalAppointmentController {
 
     private final AppointmentService service;
 
-    /**
-     * Interne app: direct bevestigde afspraak (CONFIRMED).
-     */
+    /** Interne app: direct bevestigde afspraak (CONFIRMED). */
     @PostMapping
     public AppointmentResponse createConfirmed(@Valid @RequestBody CreateAppointmentRequest req) {
         return service.createConfirmedAppointment(req);
     }
 
-    /**
-     * Appointment gedeeltelijk updaten.
-     */
+    /** Partial update (PATCH). */
     @PatchMapping("/{id}")
-    public AppointmentResponse update(
-            @PathVariable Long id,
-            @Valid @RequestBody UpdateAppointmentRequest req
-    ) {
+    public AppointmentResponse update(@PathVariable Long id, @Valid @RequestBody UpdateAppointmentRequest req) {
         return service.update(id, req);
     }
 
-    /**
-     * REQUESTED afspraak bevestigen.
-     */
+    /** REQUESTED -> CONFIRMED. */
     @PostMapping("/{id}/confirm")
-    public AppointmentResponse confirm(
-            @PathVariable Long id,
-            @Valid @RequestBody UpdateAppointmentRequest req
-    ) {
+    public AppointmentResponse confirm(@PathVariable Long id, @Valid @RequestBody UpdateAppointmentRequest req) {
         return service.confirmRequest(id, req);
     }
 
-    /**
-     * Annuleren.
-     */
+    /** Cancel (optionele reason). */
     @PostMapping("/{id}/cancel")
-    public AppointmentResponse cancel(
-            @PathVariable Long id,
-            @RequestParam(required = false) String reason
-    ) {
+    public AppointmentResponse cancel(@PathVariable Long id, @RequestParam(required = false) String reason) {
         return service.cancel(id, reason);
     }
 
-    /**
-     * Status naar IN_PROGRESS.
-     */
+    /** Status transitions. */
     @PostMapping("/{id}/start")
     public AppointmentResponse start(@PathVariable Long id) {
         return service.markInProgress(id);
     }
 
-    /**
-     * Status naar COMPLETED.
-     */
     @PostMapping("/{id}/complete")
     public AppointmentResponse complete(@PathVariable Long id) {
         return service.markCompleted(id);
     }
 
-    /**
-     * Status naar NOSHOW.
-     */
     @PostMapping("/{id}/noshow")
     public AppointmentResponse noShow(@PathVariable Long id) {
         return service.markNoShow(id);
     }
 
-    /**
-     * Één afspraak ophalen.
-     */
+    /** Read. */
     @GetMapping("/{id}")
     public AppointmentResponse get(@PathVariable Long id) {
         return service.getById(id);
     }
 
-    /**
-     * Zoeken + paginatie.
-     */
+    /** Search + pagination. */
     @GetMapping
-    public Page<?> search(
-            @RequestParam(required = false) String q,
-            Pageable pageable
-    ) {
+    public Page<?> search(@RequestParam(required = false) String q, Pageable pageable) {
+        // Als je wil: maak dit Page<AppointmentResponse> (zie note hieronder)
         return service.search(q, pageable);
     }
 }

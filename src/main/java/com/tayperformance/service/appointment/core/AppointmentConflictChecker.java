@@ -30,11 +30,7 @@ public class AppointmentConflictChecker {
         );
 
         conflicts.stream().findFirst().ifPresent(c -> {
-            throw ConflictException.appointmentOverlap(
-                    c.getId(),
-                    c.getStartTime(),
-                    c.getCarBrand()
-            );
+            throw ConflictException.appointmentOverlap(c.getId(), c.getStartTime(), c.getCarBrand());
         });
     }
 }

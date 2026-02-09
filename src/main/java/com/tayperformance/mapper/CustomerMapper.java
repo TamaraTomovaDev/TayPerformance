@@ -8,6 +8,8 @@ public final class CustomerMapper {
     private CustomerMapper() {}
 
     public static CustomerResponse toResponse(Customer c) {
+        if (c == null) return null;
+
         return CustomerResponse.builder()
                 .id(c.getId())
                 .phone(c.getPhone())

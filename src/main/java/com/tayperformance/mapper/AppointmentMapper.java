@@ -2,35 +2,27 @@ package com.tayperformance.mapper;
 
 import com.tayperformance.dto.appointment.AppointmentResponse;
 import com.tayperformance.entity.Appointment;
+import com.tayperformance.entity.Customer;
 
-public final class AppointmentMapper {
-
-    private AppointmentMapper() {
-        throw new AssertionError("Utility class");
-    }
+public class AppointmentMapper {
 
     public static AppointmentResponse toResponse(Appointment a) {
-        if (a == null) return null;
+        Customer c = a.getCustomer();
 
         return AppointmentResponse.builder()
                 .id(a.getId())
-                .customerId(a.getCustomer() != null ? a.getCustomer().getId() : null)
-                .customerName(a.getCustomer() != null ? a.getCustomer().getDisplayName() : null)
-                .customerPhone(a.getCustomer() != null ? a.getCustomer().getPhone() : null)
-                .serviceId(a.getService() != null ? a.getService().getId() : null)
-                .serviceName(a.getService() != null ? a.getService().getName() : null)
+                .customerId(c != null ? c.getId() : null)
+                .customerPhone(c != null ? c.getPhone() : null)
+                .customerName(c != null ? c.getDisplayName() : null)
                 .assignedStaffId(a.getAssignedStaff() != null ? a.getAssignedStaff().getId() : null)
-                .assignedStaffName(a.getAssignedStaff() != null ? a.getAssignedStaff().getDisplayName() : null)
                 .carBrand(a.getCarBrand())
                 .carModel(a.getCarModel())
                 .description(a.getDescription())
-                .price(a.getPrice())
                 .startTime(a.getStartTime())
                 .endTime(a.getEndTime())
                 .durationMinutes(a.getDurationMinutes())
+                .price(a.getPrice())
                 .status(a.getStatus())
-                .createdAt(a.getCreatedAt())
-                .updatedAt(a.getUpdatedAt())
                 .build();
     }
 }

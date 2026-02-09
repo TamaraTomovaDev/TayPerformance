@@ -1,11 +1,14 @@
 package com.tayperformance.service.customer;
 
 import com.tayperformance.dto.customer.CreateCustomerRequest;
+import com.tayperformance.dto.customer.CustomerHistoryResponse;
 import com.tayperformance.dto.customer.CustomerResponse;
 import com.tayperformance.dto.customer.UpdateCustomerRequest;
+import com.tayperformance.entity.Appointment;
 import com.tayperformance.entity.Customer;
 import com.tayperformance.exception.BadRequestException;
 import com.tayperformance.exception.NotFoundException;
+import com.tayperformance.mapper.AppointmentMapper;
 import com.tayperformance.mapper.CustomerMapper;
 import com.tayperformance.repository.AppointmentRepository;
 import com.tayperformance.repository.CustomerRepository;
@@ -21,10 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.OffsetDateTime;
 import java.util.List;
 
-/**
- * Service voor klantbeheer.
- * Handles: CRUD, zoeken, loyaliteit, GDPR compliance.
- */
 @Service
 @Transactional
 @RequiredArgsConstructor
@@ -40,9 +39,7 @@ public class CustomerService {
     @Value("${tay.loyalty.min-completed:4}")
     private int loyaltyThreshold;
 
-    // ============================================================
-    // CREATE
-    // ============================================================
+    // -------------------- CRUD --------------------
 
     public CustomerResponse create(CreateCustomerRequest req) {
         String phone = normalizePhone(req.getPhone());
@@ -51,22 +48,17 @@ public class CustomerService {
             throw new BadRequestException("Telefoonnummer bestaat al");
         }
 
-        Customer customer = Customer.builder()
+        Customer c = Customer.builder()
                 .phone(phone)
                 .firstName(trim(req.getFirstName()))
                 .lastName(trim(req.getLastName()))
                 .active(true)
                 .build();
 
-        customer = customerRepo.save(customer);
-
-        log.info("Created customer {}", customer.getId());
-        return CustomerMapper.toResponse(customer);
+        c = customerRepo.save(c);
+        log.info("Created customer id={} phone={}", c.getId(), c.getPhone());
+        return CustomerMapper.toResponse(c);
     }
-
-    // ============================================================
-    // UPDATE
-    // ============================================================
 
     public CustomerResponse update(Long id, UpdateCustomerRequest req) {
         Customer c = load(id);
@@ -75,14 +67,9 @@ public class CustomerService {
         if (req.getLastName() != null) c.setLastName(trim(req.getLastName()));
 
         c = customerRepo.save(c);
-
-        log.info("Updated customer {}", id);
+        log.info("Updated customer id={}", id);
         return CustomerMapper.toResponse(c);
     }
-
-    // ============================================================
-    // ACTIVE / INACTIVE
-    // ============================================================
 
     public void deactivate(Long id) {
         Customer c = load(id);
@@ -90,8 +77,7 @@ public class CustomerService {
 
         c.setActive(false);
         customerRepo.save(c);
-
-        log.info("Deactivated customer {}", id);
+        log.info("Deactivated customer id={}", id);
     }
 
     public void reactivate(Long id) {
@@ -100,13 +86,10 @@ public class CustomerService {
 
         c.setActive(true);
         customerRepo.save(c);
-
-        log.info("Reactivated customer {}", id);
+        log.info("Reactivated customer id={}", id);
     }
 
-    // ============================================================
-    // READ
-    // ============================================================
+    // -------------------- READ --------------------
 
     @Transactional(readOnly = true)
     public CustomerResponse getById(Long id) {
@@ -116,10 +99,8 @@ public class CustomerService {
     @Transactional(readOnly = true)
     public CustomerResponse getByPhone(String phone) {
         String normalized = normalizePhone(phone);
-
         Customer c = customerRepo.findByPhoneAndActiveTrue(normalized)
                 .orElseThrow(() -> new NotFoundException("Klant niet gevonden"));
-
         return CustomerMapper.toResponse(c);
     }
 
@@ -129,38 +110,60 @@ public class CustomerService {
             return customerRepo.findAllByActiveTrueOrderByFirstNameAsc(pageable)
                     .map(CustomerMapper::toResponse);
         }
-
         return customerRepo.searchActive(q.trim(), pageable)
                 .map(CustomerMapper::toResponse);
     }
 
-    // ============================================================
-    // LOYALTY & STATS
-    // ============================================================
+    // -------------------- HISTORY --------------------
 
     @Transactional(readOnly = true)
-    public boolean isLoyal(Long id) {
-        return appointmentRepo.countCompletedByCustomer(id) >= loyaltyThreshold;
+    public CustomerHistoryResponse getHistory(Long customerId) {
+        Customer customer = load(customerId);
+
+        OffsetDateTime sixMonthsAgo = OffsetDateTime.now().minusMonths(6);
+
+        List<Appointment> recent = appointmentRepo.findCompletedByCustomerSince(customerId, sixMonthsAgo);
+        long recentNoShows = appointmentRepo.countNoShowsByCustomerSince(customerId, sixMonthsAgo);
+        long totalCompleted = appointmentRepo.countCompletedByCustomer(customerId);
+
+        return CustomerHistoryResponse.builder()
+                .customerId(customer.getId())
+                .displayName(customer.getDisplayName())
+                .phone(customer.getPhone())
+                .active(customer.isActive())
+                .isLoyal(totalCompleted >= loyaltyThreshold)
+                .totalCompleted(totalCompleted)
+                .recentNoShows(recentNoShows)
+                .recentAppointments(recent.stream()
+                        .map(AppointmentMapper::toResponse)
+                        .limit(20)
+                        .toList())
+                .build();
     }
 
-    // ============================================================
-    // GDPR
-    // ============================================================
+    // -------------------- helper voor AppointmentService --------------------
 
-    public void hardDelete(Long id) {
-        Customer c = load(id);
+    public Customer findOrCreate(String phone, String fullName) {
+        String normalized = normalizePhone(phone);
 
-        if (c.isActive()) {
-            throw new BadRequestException("Deactiveer klant eerst");
-        }
+        return customerRepo.findByPhoneAndActiveTrue(normalized)
+                .orElseGet(() -> {
+                    String[] parts = splitName(fullName);
 
-        customerRepo.delete(c);
-        log.warn("Hard-deleted customer {}", id);
+                    Customer c = Customer.builder()
+                            .phone(normalized)
+                            .firstName(parts[0])
+                            .lastName(parts[1])
+                            .active(true)
+                            .build();
+
+                    Customer saved = customerRepo.save(c);
+                    log.info("Auto-created customer id={} phone={}", saved.getId(), saved.getPhone());
+                    return saved;
+                });
     }
 
-    // ============================================================
-    // HELPERS
-    // ============================================================
+    // -------------------- internal helpers --------------------
 
     private Customer load(Long id) {
         return customerRepo.findById(id)
@@ -168,6 +171,9 @@ public class CustomerService {
     }
 
     private String normalizePhone(String phone) {
+        if (phone == null || phone.isBlank()) {
+            throw new BadRequestException("Telefoonnummer is verplicht");
+        }
         String normalized = PhoneNumberHelper.normalize(phone, defaultCountry);
         if (normalized == null) throw new BadRequestException("Ongeldig telefoonnummer");
         return normalized;
@@ -175,5 +181,11 @@ public class CustomerService {
 
     private String trim(String v) {
         return (v == null || v.isBlank()) ? null : v.trim();
+    }
+
+    private String[] splitName(String fullName) {
+        if (fullName == null || fullName.isBlank()) return new String[]{"", ""};
+        String[] parts = fullName.trim().split("\\s+", 2);
+        return new String[]{parts[0], parts.length > 1 ? parts[1] : ""};
     }
 }

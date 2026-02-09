@@ -1,10 +1,8 @@
 package com.tayperformance.dto.auth;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Value;
 
-@Data
-@AllArgsConstructor
+@Value
 public class JwtResponse {
-    private String token;
+    String token;
 }

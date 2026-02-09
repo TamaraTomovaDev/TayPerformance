@@ -11,12 +11,8 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
+import java.util.List;
 
-/**
- * Custom UserDetailsService voor Spring Security.
- * Laadt gebruikersgegevens uit database voor authenticatie.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -25,47 +21,38 @@ public class CustomUserDetailsService implements UserDetailsService {
     private final UserRepository userRepository;
 
     /**
-     * Laad gebruiker op basis van username (email).
-     * Gebruikt door Spring Security tijdens login.
-     *
-     * @throws UsernameNotFoundException als gebruiker niet bestaat
+     * Spring Security gebruikt dit bij login + bij JWT requests (via filter) om user te laden.
+     * Username = email (jij gebruikt dit als identifier).
      */
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        log.debug("Loading user by username: {}", username);
 
-        User user = userRepository.findByUsername(username.toLowerCase())
-                .orElseThrow(() -> {
-                    log.warn("User not found: {}", username);
-                    return new UsernameNotFoundException("Gebruiker niet gevonden: " + username);
-                });
-
-        // Check of account actief is
-        if (!user.isActive()) {
-            log.warn("Attempted login with deactivated account: {}", username);
-            // Spring Security zal dit interpreteren als "account disabled"
+        if (username == null || username.isBlank()) {
+            throw new UsernameNotFoundException("Username is leeg");
         }
 
-        log.debug("User loaded: {} with role {}", user.getUsername(), user.getRole());
+        String normalized = username.trim().toLowerCase();
 
-        return buildUserDetails(user);
-    }
+        User user = userRepository.findByUsername(normalized)
+                .orElseThrow(() -> {
+                    log.warn("User not found: {}", normalized);
+                    return new UsernameNotFoundException("Gebruiker niet gevonden: " + normalized);
+                });
 
-    /**
-     * Converteer domain User naar Spring Security UserDetails.
-     */
-    private UserDetails buildUserDetails(User user) {
+        // authorities: ROLE_ADMIN / ROLE_STAFF
+        List<SimpleGrantedAuthority> authorities = List.of(
+                new SimpleGrantedAuthority("ROLE_" + user.getRole().name())
+        );
+
         return org.springframework.security.core.userdetails.User.builder()
                 .username(user.getUsername())
                 .password(user.getPasswordHash())
-                .disabled(!user.isActive())
+                .disabled(!user.isActive())          // gedeactiveerd = kan niet loginnen
                 .accountExpired(false)
                 .accountLocked(false)
                 .credentialsExpired(false)
-                .authorities(Collections.singletonList(
-                        new SimpleGrantedAuthority("ROLE_" + user.getRole().name())
-                ))
+                .authorities(authorities)
                 .build();
     }
 }

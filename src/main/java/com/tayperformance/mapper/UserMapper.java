@@ -17,7 +17,6 @@ public final class UserMapper {
                 .active(u.isActive())
                 .createdAt(u.getCreatedAt())
                 .updatedAt(u.getUpdatedAt())
-                .displayName(u.getDisplayName())
                 .build();
     }
 }

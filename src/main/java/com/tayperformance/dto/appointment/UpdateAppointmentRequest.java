@@ -6,10 +6,6 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
-/**
- * Request DTO voor het updaten van bestaande afspraken.
- * Alle velden zijn optioneel (partial update).
- */
 @Data
 public class UpdateAppointmentRequest {
 

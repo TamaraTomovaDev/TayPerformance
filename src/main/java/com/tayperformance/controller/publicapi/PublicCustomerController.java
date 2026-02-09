@@ -5,29 +5,15 @@ import com.tayperformance.service.customer.CustomerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * Publieke klantendata (alleen lezen).
- */
 @RestController
-@RequestMapping("/public/customers")
+@RequestMapping("/api/public/customers")
 @RequiredArgsConstructor
 public class PublicCustomerController {
 
-    private final CustomerService service;
+    private final CustomerService customerService;
 
-    /**
-     * Zoeken op telefoonnummer (alleen actieve klanten).
-     */
     @GetMapping("/by-phone")
     public CustomerResponse getByPhone(@RequestParam String phone) {
-        return service.getByPhone(phone);
-    }
-
-    /**
-     * Klant ophalen op ID.
-     */
-    @GetMapping("/{id}")
-    public CustomerResponse getById(@PathVariable Long id) {
-        return service.getById(id);
+        return customerService.getByPhone(phone);
     }
 }

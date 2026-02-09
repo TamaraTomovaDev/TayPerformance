@@ -16,32 +16,25 @@ public class AppointmentSmsScheduler {
 
     private final SmsService smsService;
 
-    /**
-     * Stuurt SMS *na* succesvolle transacties via afterCommit()
-     */
     public void schedule(Appointment appt, SmsType type) {
-
         if (!TransactionSynchronizationManager.isActualTransactionActive()) {
-            log.warn("No active transaction. SMS for appointment {} skipped.", appt.getId());
+            log.warn("No active transaction; SMS skipped appointment={}", appt.getId());
             return;
         }
 
-        TransactionSynchronizationManager.registerSynchronization(
-                new TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        try {
-                            switch (type) {
-                                case CONFIRM -> smsService.sendConfirmation(appt);
-                                case CANCEL -> smsService.sendCancellation(appt);
-                                case UPDATE -> smsService.sendUpdate(appt);
-                                default -> log.warn("Unknown SMS type {}", type);
-                            }
-                        } catch (Exception ex) {
-                            log.error("Failed to send SMS for appointment {} type {}", appt.getId(), type, ex);
-                        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override public void afterCommit() {
+                try {
+                    switch (type) {
+                        case CONFIRM -> smsService.sendConfirmation(appt);
+                        case CANCEL -> smsService.sendCancellation(appt);
+                        case UPDATE -> smsService.sendUpdate(appt);
+                        case REMINDER -> smsService.sendReminder(appt);
                     }
+                } catch (Exception ex) {
+                    log.error("Failed to send SMS appointment={} type={}", appt.getId(), type, ex);
                 }
-        );
+            }
+        });
     }
 }

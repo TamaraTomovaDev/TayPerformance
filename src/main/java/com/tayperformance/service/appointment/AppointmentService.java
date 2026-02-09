@@ -8,12 +8,11 @@ import com.tayperformance.exception.BadRequestException;
 import com.tayperformance.exception.NotFoundException;
 import com.tayperformance.mapper.AppointmentMapper;
 import com.tayperformance.repository.AppointmentRepository;
-import com.tayperformance.repository.CustomerRepository;
-import com.tayperformance.repository.DetailServiceRepository;
 import com.tayperformance.repository.UserRepository;
 import com.tayperformance.service.appointment.core.AppointmentConflictChecker;
-import com.tayperformance.service.appointment.core.AppointmentValidator;
 import com.tayperformance.service.appointment.core.AppointmentSmsScheduler;
+import com.tayperformance.service.appointment.core.AppointmentValidator;
+import com.tayperformance.service.customer.CustomerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -21,7 +20,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Service
@@ -31,46 +29,28 @@ import java.time.OffsetDateTime;
 public class AppointmentService {
 
     private final AppointmentRepository appointmentRepo;
-    private final CustomerRepository customerRepo;
-    private final DetailServiceRepository serviceRepo;
     private final UserRepository userRepo;
 
     private final AppointmentValidator validator;
     private final AppointmentConflictChecker conflictChecker;
     private final AppointmentSmsScheduler smsScheduler;
+    private final CustomerService customerService;
 
-    // ============================================================
-    // CREATE - PUBLIEKE WEBSITE (REQUESTED)
-    // ============================================================
-
-    /**
-     * Publieke website - klant vraagt afspraak aan.
-     * Status = REQUESTED, moet nog bevestigd worden door staff.
-     */
     public AppointmentResponse createPublicRequest(CreateAppointmentRequest req) {
-        log.info("Creating public appointment request for phone: {}", req.getCustomerPhone());
+        log.info("Public request phone={}", req.getCustomerPhone());
 
-        // Validatie
         validator.validateStartInFuture(req.getStartTime());
-        if (req.getServiceId() == null) {
-            throw new BadRequestException("Service is verplicht voor publieke booking");
-        }
 
-        // Ophalen/aanmaken customer
-        Customer customer = customerRepo.findByPhoneAndActiveTrue(req.getCustomerPhone())
-                .orElseGet(() -> createNewCustomer(req));
+        Customer customer = customerService.findOrCreate(req.getCustomerPhone(), req.getCustomerName());
 
-        // Ophalen service
-        DetailService service = serviceRepo.findById(req.getServiceId())
-                .orElseThrow(() -> new NotFoundException("Service niet gevonden"));
+        // MVP: duration for public request -> default 60 min if not provided
+        int minutes = (req.getDurationMinutes() != null) ? req.getDurationMinutes() : 60;
+        validator.validateDuration(minutes);
 
-        // Berekenen endTime obv service duur
-        OffsetDateTime endTime = req.getStartTime().plusMinutes(service.getDefaultMinutes());
+        OffsetDateTime endTime = req.getStartTime().plusMinutes(minutes);
 
-        // Maak appointment
-        Appointment appointment = Appointment.builder()
+        Appointment appt = Appointment.builder()
                 .customer(customer)
-                .service(service)
                 .carBrand(req.getCarBrand())
                 .carModel(req.getCarModel())
                 .description(req.getDescription())
@@ -79,55 +59,29 @@ public class AppointmentService {
                 .status(AppointmentStatus.REQUESTED)
                 .build();
 
-        appointment = appointmentRepo.save(appointment);
-
-        log.info("Created appointment request with ID: {}", appointment.getId());
-        return AppointmentMapper.toResponse(appointment);
+        appt = appointmentRepo.save(appt);
+        return AppointmentMapper.toResponse(appt);
     }
 
-    // ============================================================
-    // CREATE - INTERNE APP (DIRECT CONFIRMED)
-    // ============================================================
-
-    /**
-     * Interne app - staff maakt direct bevestigde afspraak.
-     * Status = CONFIRMED, klaar om uitgevoerd te worden.
-     */
     public AppointmentResponse createConfirmedAppointment(CreateAppointmentRequest req) {
-        log.info("Creating confirmed appointment for phone: {}", req.getCustomerPhone());
+        log.info("Internal confirmed phone={}", req.getCustomerPhone());
 
-        // Validatie - interne app vereist meer velden
         validator.validateStartInFuture(req.getStartTime());
-        if (req.getPrice() == null) {
-            throw new BadRequestException("Prijs is verplicht voor directe booking");
-        }
-        if (req.getAssignedStaffId() == null) {
-            throw new BadRequestException("Staff is verplicht voor directe booking");
-        }
-        if (req.getDurationMinutes() == null) {
-            throw new BadRequestException("Duur is verplicht voor directe booking");
-        }
+
+        if (req.getPrice() == null) throw new BadRequestException("Prijs is verplicht voor directe booking");
+        if (req.getAssignedStaffId() == null) throw new BadRequestException("Staff is verplicht");
+        if (req.getDurationMinutes() == null) throw new BadRequestException("Duur is verplicht");
         validator.validateDuration(req.getDurationMinutes());
 
-        // Ophalen entities
-        Customer customer = customerRepo.findByPhoneAndActiveTrue(req.getCustomerPhone())
-                .orElseGet(() -> createNewCustomer(req));
+        Customer customer = customerService.findOrCreate(req.getCustomerPhone(), req.getCustomerName());
 
         User staff = userRepo.findById(req.getAssignedStaffId())
                 .orElseThrow(() -> new NotFoundException("Staff niet gevonden"));
 
-        DetailService service = req.getServiceId() != null
-                ? serviceRepo.findById(req.getServiceId())
-                .orElseThrow(() -> new NotFoundException("Service niet gevonden"))
-                : null;
-
-        // Berekenen endTime
         OffsetDateTime endTime = req.getStartTime().plusMinutes(req.getDurationMinutes());
 
-        // Maak appointment
-        Appointment appointment = Appointment.builder()
+        Appointment appt = Appointment.builder()
                 .customer(customer)
-                .service(service)
                 .assignedStaff(staff)
                 .carBrand(req.getCarBrand())
                 .carModel(req.getCarModel())
@@ -138,48 +92,33 @@ public class AppointmentService {
                 .status(AppointmentStatus.CONFIRMED)
                 .build();
 
-        // Check conflicts
-        conflictChecker.ensureNoConflict(appointment);
+        conflictChecker.ensureNoConflict(appt);
 
-        appointment = appointmentRepo.save(appointment);
+        appt = appointmentRepo.save(appt);
+        smsScheduler.schedule(appt, SmsType.CONFIRM);
 
-        // Schedule SMS
-        smsScheduler.schedule(appointment, SmsType.CONFIRM);
-
-        log.info("Created confirmed appointment with ID: {}", appointment.getId());
-        return AppointmentMapper.toResponse(appointment);
+        return AppointmentMapper.toResponse(appt);
     }
 
-    // ============================================================
-    // UPDATE - GENERIC (alle velden optioneel)
-    // ============================================================
-
-    /**
-     * Update appointment details.
-     * Alleen ingevulde velden worden geüpdatet.
-     */
     public AppointmentResponse update(Long id, UpdateAppointmentRequest req) {
-        log.info("Updating appointment {}", id);
-
-        Appointment appointment = appointmentRepo.findById(id)
+        Appointment appt = appointmentRepo.findById(id)
                 .orElseThrow(() -> new NotFoundException("Afspraak niet gevonden"));
 
-        validator.ensureModifiable(appointment);
+        validator.ensureModifiable(appt);
 
         boolean needsConflictCheck = false;
         boolean needsSms = false;
 
-        // Update velden als ze ingevuld zijn
         if (req.getStartTime() != null) {
             validator.validateStartInFuture(req.getStartTime());
-            appointment.setStartTime(req.getStartTime());
+            appt.setStartTime(req.getStartTime());
             needsConflictCheck = true;
             needsSms = true;
         }
 
         if (req.getDurationMinutes() != null) {
             validator.validateDuration(req.getDurationMinutes());
-            appointment.setEndTime(appointment.getStartTime().plusMinutes(req.getDurationMinutes()));
+            appt.setEndTime(appt.getStartTime().plusMinutes(req.getDurationMinutes()));
             needsConflictCheck = true;
             needsSms = true;
         }
@@ -187,189 +126,98 @@ public class AppointmentService {
         if (req.getAssignedStaffId() != null) {
             User staff = userRepo.findById(req.getAssignedStaffId())
                     .orElseThrow(() -> new NotFoundException("Staff niet gevonden"));
-            appointment.setAssignedStaff(staff);
+            appt.setAssignedStaff(staff);
             needsConflictCheck = true;
         }
 
-        if (req.getPrice() != null) {
-            appointment.setPrice(req.getPrice());
-        }
+        if (req.getPrice() != null) appt.setPrice(req.getPrice());
+        if (req.getDescription() != null) appt.setDescription(req.getDescription());
+        if (req.getCarBrand() != null) appt.setCarBrand(req.getCarBrand());
+        if (req.getCarModel() != null) appt.setCarModel(req.getCarModel());
 
-        if (req.getDescription() != null) {
-            appointment.setDescription(req.getDescription());
-        }
+        if (needsConflictCheck) conflictChecker.ensureNoConflict(appt);
 
-        if (req.getCarBrand() != null) {
-            appointment.setCarBrand(req.getCarBrand());
-        }
+        appt = appointmentRepo.save(appt);
 
-        if (req.getCarModel() != null) {
-            appointment.setCarModel(req.getCarModel());
-        }
+        if (needsSms) smsScheduler.schedule(appt, SmsType.UPDATE);
 
-        // Conflict check als tijd/staff gewijzigd is
-        if (needsConflictCheck) {
-            conflictChecker.ensureNoConflict(appointment);
-        }
-
-        appointment = appointmentRepo.save(appointment);
-
-        // SMS als tijd gewijzigd is
-        if (needsSms) {
-            smsScheduler.schedule(appointment, SmsType.UPDATE);
-        }
-
-        log.info("Updated appointment {}", id);
-        return AppointmentMapper.toResponse(appointment);
+        return AppointmentMapper.toResponse(appt);
     }
 
-    // ============================================================
-    // CONFIRM - REQUESTED → CONFIRMED
-    // ============================================================
-
-    /**
-     * Bevestig een REQUESTED appointment.
-     * Wijst staff toe, zet prijs en duur, changes status naar CONFIRMED.
-     */
     public AppointmentResponse confirmRequest(Long id, UpdateAppointmentRequest req) {
-        log.info("Confirming appointment request {}", id);
-
-        Appointment appointment = appointmentRepo.findById(id)
+        Appointment appt = appointmentRepo.findById(id)
                 .orElseThrow(() -> new NotFoundException("Afspraak niet gevonden"));
 
-        if (appointment.getStatus() != AppointmentStatus.REQUESTED) {
+        if (appt.getStatus() != AppointmentStatus.REQUESTED) {
             throw new BadRequestException("Alleen REQUESTED afspraken kunnen bevestigd worden");
         }
 
-        // Validatie - deze velden zijn verplicht voor confirmation
-        if (req.getAssignedStaffId() == null) {
-            throw new BadRequestException("Staff is verplicht");
-        }
-        if (req.getPrice() == null) {
-            throw new BadRequestException("Prijs is verplicht");
-        }
-        if (req.getDurationMinutes() == null) {
-            throw new BadRequestException("Duur is verplicht");
-        }
+        if (req.getAssignedStaffId() == null) throw new BadRequestException("Staff is verplicht");
+        if (req.getPrice() == null) throw new BadRequestException("Prijs is verplicht");
+        if (req.getDurationMinutes() == null) throw new BadRequestException("Duur is verplicht");
+
         validator.validateDuration(req.getDurationMinutes());
 
-        // Assign staff
         User staff = userRepo.findById(req.getAssignedStaffId())
                 .orElseThrow(() -> new NotFoundException("Staff niet gevonden"));
-        appointment.setAssignedStaff(staff);
 
-        // Set price & duration
-        appointment.setPrice(req.getPrice());
-        appointment.setEndTime(appointment.getStartTime().plusMinutes(req.getDurationMinutes()));
+        appt.setAssignedStaff(staff);
+        appt.setPrice(req.getPrice());
+        appt.setEndTime(appt.getStartTime().plusMinutes(req.getDurationMinutes()));
+        appt.setStatus(AppointmentStatus.CONFIRMED);
 
-        // Check conflicts
-        conflictChecker.ensureNoConflict(appointment);
+        conflictChecker.ensureNoConflict(appt);
 
-        // Change status
-        appointment.setStatus(AppointmentStatus.CONFIRMED);
+        appt = appointmentRepo.save(appt);
+        smsScheduler.schedule(appt, SmsType.CONFIRM);
 
-        appointment = appointmentRepo.save(appointment);
-
-        // SMS
-        smsScheduler.schedule(appointment, SmsType.CONFIRM);
-
-        log.info("Confirmed appointment {}", id);
-        return AppointmentMapper.toResponse(appointment);
+        return AppointmentMapper.toResponse(appt);
     }
-
-    // ============================================================
-    // CANCEL
-    // ============================================================
 
     public AppointmentResponse cancel(Long id, String reason) {
-        log.info("Canceling appointment {}", id);
-
-        Appointment appointment = appointmentRepo.findById(id)
+        Appointment appt = appointmentRepo.findById(id)
                 .orElseThrow(() -> new NotFoundException("Afspraak niet gevonden"));
 
-        if (appointment.getStatus() == AppointmentStatus.CANCELED) {
-            throw new BadRequestException("Afspraak is al geannuleerd");
-        }
-        if (appointment.getStatus() == AppointmentStatus.COMPLETED) {
-            throw new BadRequestException("Afgeronde afspraken kunnen niet geannuleerd worden");
-        }
+        if (appt.getStatus() == AppointmentStatus.CANCELED) throw new BadRequestException("Afspraak is al geannuleerd");
+        if (appt.getStatus() == AppointmentStatus.COMPLETED) throw new BadRequestException("Afgeronde afspraken kunnen niet geannuleerd worden");
 
-        appointment.setStatus(AppointmentStatus.CANCELED);
-        if (reason != null) {
-            appointment.setDescription(appointment.getDescription() + "\nAnnuleringsreden: " + reason);
+        appt.setStatus(AppointmentStatus.CANCELED);
+
+        if (reason != null && !reason.isBlank()) {
+            String desc = appt.getDescription() == null ? "" : appt.getDescription();
+            appt.setDescription(desc + "\nAnnuleringsreden: " + reason.trim());
         }
 
-        appointment = appointmentRepo.save(appointment);
+        appt = appointmentRepo.save(appt);
+        smsScheduler.schedule(appt, SmsType.CANCEL);
 
-        // SMS
-        smsScheduler.schedule(appointment, SmsType.CANCEL);
-
-        log.info("Canceled appointment {}", id);
-        return AppointmentMapper.toResponse(appointment);
+        return AppointmentMapper.toResponse(appt);
     }
 
-    // ============================================================
-    // STATUS TRANSITIONS
-    // ============================================================
-
-    public AppointmentResponse markInProgress(Long id) {
-        return transitionStatus(id, AppointmentStatus.IN_PROGRESS);
-    }
-
-    public AppointmentResponse markCompleted(Long id) {
-        return transitionStatus(id, AppointmentStatus.COMPLETED);
-    }
-
-    public AppointmentResponse markNoShow(Long id) {
-        return transitionStatus(id, AppointmentStatus.NOSHOW);
-    }
+    public AppointmentResponse markInProgress(Long id) { return transitionStatus(id, AppointmentStatus.IN_PROGRESS); }
+    public AppointmentResponse markCompleted(Long id)  { return transitionStatus(id, AppointmentStatus.COMPLETED); }
+    public AppointmentResponse markNoShow(Long id)     { return transitionStatus(id, AppointmentStatus.NOSHOW); }
 
     private AppointmentResponse transitionStatus(Long id, AppointmentStatus newStatus) {
-        Appointment appointment = appointmentRepo.findById(id)
+        Appointment appt = appointmentRepo.findById(id)
                 .orElseThrow(() -> new NotFoundException("Afspraak niet gevonden"));
 
-        appointment.setStatus(newStatus);
-        appointment = appointmentRepo.save(appointment);
+        appt.setStatus(newStatus);
+        appt = appointmentRepo.save(appt);
 
-        log.info("Transitioned appointment {} to status {}", id, newStatus);
-        return AppointmentMapper.toResponse(appointment);
+        return AppointmentMapper.toResponse(appt);
     }
 
-    // ============================================================
-    // READ OPERATIONS
-    // ============================================================
-
+    @Transactional(readOnly = true)
     public AppointmentResponse getById(Long id) {
-        Appointment appointment = appointmentRepo.findById(id)
+        Appointment appt = appointmentRepo.findById(id)
                 .orElseThrow(() -> new NotFoundException("Afspraak niet gevonden"));
-        return AppointmentMapper.toResponse(appointment);
+        return AppointmentMapper.toResponse(appt);
     }
 
-    public Page<Appointment> search(String searchTerm, Pageable pageable) {
-        if (searchTerm == null || searchTerm.isBlank()) {
-            return appointmentRepo.findAllByOrderByStartTimeDesc(pageable);
-        }
-        return appointmentRepo.searchByCustomer(searchTerm, pageable);
-    }
-
-    // ============================================================
-    // HELPER METHODS
-    // ============================================================
-
-    private Customer createNewCustomer(CreateAppointmentRequest req) {
-        log.info("Creating new customer for phone: {}", req.getCustomerPhone());
-
-        String[] nameParts = req.getCustomerName() != null
-                ? req.getCustomerName().split(" ", 2)
-                : new String[]{"", ""};
-
-        Customer customer = Customer.builder()
-                .phone(req.getCustomerPhone())
-                .firstName(nameParts[0])
-                .lastName(nameParts.length > 1 ? nameParts[1] : "")
-                .active(true)
-                .build();
-
-        return customerRepo.save(customer);
+    @Transactional(readOnly = true)
+    public Page<Appointment> search(String q, Pageable pageable) {
+        if (q == null || q.isBlank()) return appointmentRepo.findAllByOrderByStartTimeDesc(pageable);
+        return appointmentRepo.search(q.trim(), pageable);
     }
 }

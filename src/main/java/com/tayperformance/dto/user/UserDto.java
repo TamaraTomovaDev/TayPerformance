@@ -12,7 +12,7 @@ public class UserDto {
     private String username;
     private String role;
     private boolean active;
+    private String displayName;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
-    private String displayName;
 }
