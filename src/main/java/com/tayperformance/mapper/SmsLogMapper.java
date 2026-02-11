@@ -1,27 +1,28 @@
 package com.tayperformance.mapper;
 
-import com.tayperformance.dto.sms.SmsLogDto;
+import com.tayperformance.dto.sms.SmsLogResponse;
 import com.tayperformance.entity.SmsLog;
 
 public final class SmsLogMapper {
 
-    private SmsLogMapper() {}
+    private SmsLogMapper() {
+    }
 
-    public static SmsLogDto toDto(SmsLog s) {
-        if (s == null) return null;
+    public static SmsLogResponse toResponse(SmsLog log) {
+        if (log == null) return null;
 
-        return SmsLogDto.builder()
-                .id(s.getId())
-                .appointmentId(s.getAppointment().getId())
-                .type(s.getType())
-                .status(s.getStatus())
-                .toPhone(s.getToPhone())
-                .messageBody(s.getMessageBody())
-                .providerMessageId(s.getProviderMessageId())
-                .errorMessage(s.getErrorMessage())
-                .createdAt(s.getCreatedAt())
-                .sentAt(s.getSentAt())
-                .deliveredAt(s.getDeliveredAt())
+        return SmsLogResponse.builder()
+                .id(log.getId())
+                .appointmentId(
+                        log.getAppointment() != null ? log.getAppointment().getId() : null
+                )
+                .type(log.getType().name())
+                .status(log.getStatus().name())
+                .toPhone(log.getToPhone())
+                .messageBody(log.getMessageBody())
+                .createdAt(log.getCreatedAt())
+                .sentAt(log.getSentAt())
+                .deliveredAt(log.getDeliveredAt())
                 .build();
     }
 }

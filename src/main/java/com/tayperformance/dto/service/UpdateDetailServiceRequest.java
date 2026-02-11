@@ -2,13 +2,12 @@ package com.tayperformance.dto.service;
 
 import lombok.Data;
 
+import java.math.BigDecimal;
+
 @Data
-public class UpdateServiceRequest {
+public class UpdateDetailServiceRequest {
     private String name;
-    private String description;
     private Integer defaultMinutes;
-    private Integer minMinutes;
-    private Integer maxMinutes;
+    private BigDecimal basePrice;
     private Boolean active;
 }
-

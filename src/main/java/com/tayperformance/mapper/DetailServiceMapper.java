@@ -1,22 +1,21 @@
 package com.tayperformance.mapper;
 
-import com.tayperformance.dto.service.ServiceDto;
+import com.tayperformance.dto.service.DetailServiceResponse;
 import com.tayperformance.entity.DetailService;
 
 public final class DetailServiceMapper {
 
     private DetailServiceMapper() {}
 
-    public static ServiceDto toDto(DetailService s) {
+    public static DetailServiceResponse toResponse(DetailService s) {
         if (s == null) return null;
 
-        return ServiceDto.builder()
+        return DetailServiceResponse.builder()
                 .id(s.getId())
                 .name(s.getName())
                 .defaultMinutes(s.getDefaultMinutes())
+                .basePrice(s.getBasePrice())
                 .active(s.isActive())
-                .createdAt(s.getCreatedAt())
-                .updatedAt(s.getUpdatedAt())
                 .build();
     }
 }

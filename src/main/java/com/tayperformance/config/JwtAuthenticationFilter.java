@@ -1,18 +1,15 @@
 package com.tayperformance.config;
 
-import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -27,76 +24,34 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final UserDetailsService userDetailsService;
 
     @Override
-    protected void doFilterInternal(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            FilterChain filterChain
-    ) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
 
-        String header = request.getHeader(HttpHeaders.AUTHORIZATION);
+        String header = request.getHeader("Authorization");
 
-        // Geen bearer -> gewoon verder (public endpoints etc.)
-        if (header == null || !header.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
+        if (header != null && header.startsWith("Bearer ")) {
+            String token = header.substring(7);
 
-        String token = header.substring(7).trim();
-        if (token.isBlank()) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        try {
-            // Als al authenticated is, niet opnieuw zetten
-            if (SecurityContextHolder.getContext().getAuthentication() == null) {
-
+            try {
                 String username = jwtProvider.extractUsername(token);
-                if (username != null && !username.isBlank()) {
 
-                    UserDetails userDetails =
-                            userDetailsService.loadUserByUsername(username.trim().toLowerCase());
+                if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
                     if (jwtProvider.isTokenValid(token, userDetails)) {
-
-                        UsernamePasswordAuthenticationToken authentication =
-                                new UsernamePasswordAuthenticationToken(
-                                        userDetails,
-                                        null,
-                                        userDetails.getAuthorities()
-                                );
-
-                        authentication.setDetails(
-                                new WebAuthenticationDetailsSource().buildDetails(request)
+                        var auth = new UsernamePasswordAuthenticationToken(
+                                userDetails, null, userDetails.getAuthorities()
                         );
-
-                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                        SecurityContextHolder.getContext().setAuthentication(auth);
                     }
                 }
+            } catch (Exception ex) {
+                // ❗ Geen 500: token gewoon negeren en request gaat verder als anonymous
+                log.debug("Invalid JWT token: {}", ex.getMessage());
             }
-
-        } catch (JwtException ex) {
-            // Token ongeldig/expired/signature wrong -> NIET crashen.
-            // Laat request verder gaan; SecurityConfig zal hem blocken waar nodig.
-            log.debug("Invalid JWT: {}", ex.getMessage());
-        } catch (Exception ex) {
-            // Nooit 500 door auth filter
-            log.warn("JWT filter error: {}", ex.getMessage());
         }
 
         filterChain.doFilter(request, response);
-    }
-
-    /**
-     * Optioneel: filter niet toepassen op public endpoints of h2-console.
-     * Dit is niet verplicht, maar maakt dev/debug leuker.
-     */
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getRequestURI();
-
-        // Pas aan naar jouw echte routes
-        return path.startsWith("/api/public/")
-                || path.startsWith("/h2-console");
     }
 }
