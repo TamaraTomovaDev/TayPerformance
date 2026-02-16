@@ -4,37 +4,38 @@ import com.tayperformance.entity.Appointment;
 import com.tayperformance.entity.SmsType;
 import com.tayperformance.service.sms.SmsService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-@Service
+@Component
 @RequiredArgsConstructor
-@Slf4j
 public class AppointmentSmsScheduler {
 
     private final SmsService smsService;
 
     public void schedule(Appointment appt, SmsType type) {
-        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
-            log.warn("No active transaction; SMS skipped appointment={}", appt.getId());
-            return;
-        }
 
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override public void afterCommit() {
-                try {
-                    switch (type) {
-                        case CONFIRM -> smsService.sendConfirmation(appt);
-                        case CANCEL -> smsService.sendCancellation(appt);
-                        case UPDATE -> smsService.sendUpdate(appt);
-                        case REMINDER -> smsService.sendReminder(appt);
-                    }
-                } catch (Exception ex) {
-                    log.error("Failed to send SMS appointment={} type={}", appt.getId(), type, ex);
+        // ✅ verstuur pas nadat de transactie committed is
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    sendNow(appt, type);
                 }
-            }
-        });
+            });
+        } else {
+            // fallback (zou zelden gebeuren)
+            sendNow(appt, type);
+        }
+    }
+
+    private void sendNow(Appointment appt, SmsType type) {
+        switch (type) {
+            case CONFIRM -> smsService.sendConfirmation(appt);
+            case UPDATE -> smsService.sendUpdate(appt);
+            case CANCEL -> smsService.sendCancellation(appt);
+            case REMINDER -> smsService.sendReminder(appt);
+        }
     }
 }

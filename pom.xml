@@ -22,6 +22,9 @@
     <properties>
         <java.version>17</java.version>
         <jjwt.version>0.11.5</jjwt.version>
+
+        <!-- ✅ Flyway version (belangrijk: hier!) -->
+        <flyway.version>10.20.1</flyway.version>
     </properties>
 
     <dependencies>
@@ -76,6 +79,20 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- 🪶 FLYWAY MIGRATIONS -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>${flyway.version}</version>
+        </dependency>
+
+        <!-- Voor Postgres specifieke Flyway support -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <version>${flyway.version}</version>
+        </dependency>
+
         <!-- ☎️ PHONE NUMBER VALIDATION -->
         <dependency>
             <groupId>com.googlecode.libphonenumber</groupId>
@@ -98,10 +115,17 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- H2 (alleen handig voor lokaal/test, maar jij gebruikt Neon)
+             Tip: je kan dit later test-scope maken of weglaten. -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.twilio.sdk</groupId>
+            <artifactId>twilio</artifactId>
+            <version>10.4.2</version>
         </dependency>
 
     </dependencies>
@@ -121,7 +145,7 @@
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
-                            <version>1.18.30</version> <!-- versie toevoegen -->
+                            <version>1.18.30</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>

@@ -1,4 +1,4 @@
-package com.tayperformance.controller.internal;
+package com.tayperformance.controller.internalapi;
 
 import com.tayperformance.dto.appointment.AppointmentResponse;
 import com.tayperformance.dto.appointment.CreateAppointmentRequest;
@@ -67,8 +67,19 @@ public class InternalAppointmentController {
 
     /** Search + pagination. */
     @GetMapping
-    public Page<?> search(@RequestParam(required = false) String q, Pageable pageable) {
-        // Als je wil: maak dit Page<AppointmentResponse> (zie note hieronder)
-        return service.search(q, pageable);
+    public Page<AppointmentResponse> search(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate date,
+            Pageable pageable
+    ) {
+        return service.search(q, date, pageable);
     }
+
+    @DeleteMapping("/{id}")
+    public void delete(@PathVariable Long id) {
+        service.delete(id);
+    }
+
 }

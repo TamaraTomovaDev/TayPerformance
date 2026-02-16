@@ -10,6 +10,7 @@ import java.time.OffsetDateTime;
 @Value
 @Builder
 public class AppointmentResponse {
+
     Long id;
 
     Long customerId;
@@ -26,6 +27,7 @@ public class AppointmentResponse {
     OffsetDateTime endTime;
 
     Integer durationMinutes;
+
     BigDecimal price;
 
     AppointmentStatus status;

@@ -1,4 +1,4 @@
-package com.tayperformance.config;
+package com.tayperformance.security;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
@@ -20,7 +20,7 @@ public class JwtProvider {
 
     public JwtProvider(
             @Value("${jwt.secret}") String secret,
-            @Value("${jwt.expiration-ms}") long expirationMs
+            @Value("${jwt.expiration-ms:43200000}") long expirationMs // default: 12h
     ) {
         this.secret = secret;
         this.expirationMs = expirationMs;
@@ -28,10 +28,15 @@ public class JwtProvider {
 
     private Key getSigningKey() {
         byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
-        // HS256 requires >= 32 bytes key for good security.
+
+        // HS256: 32 bytes minimum recommended
         if (bytes.length < 32) {
-            throw new IllegalStateException("jwt.secret must be at least 32 bytes for HS256");
+            throw new IllegalStateException(
+                    "jwt.secret must be at least 32 bytes for HS256. " +
+                            "Tip: use something like 'devSecret12345_devSecret12345_dev!'"
+            );
         }
+
         return Keys.hmacShaKeyFor(bytes);
     }
 
@@ -51,7 +56,9 @@ public class JwtProvider {
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
         String username = extractUsername(token);
-        return username.equalsIgnoreCase(userDetails.getUsername()) && !isTokenExpired(token);
+        return username != null
+                && username.equalsIgnoreCase(userDetails.getUsername())
+                && !isTokenExpired(token);
     }
 
     private boolean isTokenExpired(String token) {

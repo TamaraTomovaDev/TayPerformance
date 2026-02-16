@@ -11,7 +11,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/public/services")
 @RequiredArgsConstructor
-public class PublicDetailServiceController {
+public class PublicServiceController {
 
     private final DetailServiceRepository repo;
 

@@ -13,7 +13,7 @@ public final class UserMapper {
         return UserDto.builder()
                 .id(u.getId())
                 .username(u.getUsername())
-                .role(u.getRole().name())
+                .role(u.getRole() != null ? u.getRole().name() : null)
                 .active(u.isActive())
                 .createdAt(u.getCreatedAt())
                 .updatedAt(u.getUpdatedAt())

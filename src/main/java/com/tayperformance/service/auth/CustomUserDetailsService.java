@@ -34,7 +34,7 @@ public class CustomUserDetailsService implements UserDetailsService {
 
         String normalized = username.trim().toLowerCase();
 
-        User user = userRepository.findByUsername(normalized)
+        User user = userRepository.findByUsernameIgnoreCase(normalized)
                 .orElseThrow(() -> {
                     log.warn("User not found: {}", normalized);
                     return new UsernameNotFoundException("Gebruiker niet gevonden: " + normalized);

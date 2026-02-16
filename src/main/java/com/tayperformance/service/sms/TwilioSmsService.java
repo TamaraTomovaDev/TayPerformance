@@ -1,5 +1,6 @@
 package com.tayperformance.service.sms;
 
+import com.tayperformance.config.GarageProperties;
 import com.tayperformance.entity.*;
 import com.tayperformance.repository.SmsLogRepository;
 import lombok.RequiredArgsConstructor;
@@ -7,8 +8,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import com.twilio.rest.api.v2010.account.Message;
+import com.twilio.type.PhoneNumber;
+
 
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
@@ -18,103 +23,175 @@ import java.util.Locale;
 public class TwilioSmsService implements SmsService {
 
     private final SmsLogRepository smsLogRepository;
-
-    @Value("${tay.garage.name:Tay Performance}")
-    private String garageName;
-
-    @Value("${tay.garage.address:Rue Example 123, 67000 Strasbourg}")
-    private String garageAddress;
-
-    @Value("${tay.garage.phone:+33 6 12 34 56 78}")
-    private String garagePhone;
+    private final GarageProperties garage;
 
     @Value("${tay.sms.enabled:false}")
     private boolean smsEnabled;
 
+    /**
+     * MVP: simpele taalkeuze via property.
+     * Later kan je dit per klant opslaan.
+     */
     @Value("${tay.sms.language:FR}")
     private String language;
+    @Value("${twilio.from:}")
+    private String twilioFrom;
 
-    private static final DateTimeFormatter DATE_FORMAT =
-            DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.FRANCE);
-    private static final DateTimeFormatter TIME_FORMAT =
-            DateTimeFormatter.ofPattern("HH'h'mm", Locale.FRANCE);
+    @Value("${twilio.messaging-service-sid:}")
+    private String messagingServiceSid;
+
+
+    private static final ZoneId ZONE = ZoneId.of("Europe/Brussels");
+    private static final DateTimeFormatter DATE_FR = DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.FRANCE);
+    private static final DateTimeFormatter TIME_FR = DateTimeFormatter.ofPattern("HH'h'mm", Locale.FRANCE);
+    private static final DateTimeFormatter DATE_NL = DateTimeFormatter.ofPattern("dd/MM/yyyy", new Locale("nl", "BE"));
+    private static final DateTimeFormatter TIME_NL = DateTimeFormatter.ofPattern("HH:mm", new Locale("nl", "BE"));
 
     @Async
     @Override
     public void sendConfirmation(Appointment appointment) {
-        if (!smsEnabled) { log.info("SMS disabled, skip CONFIRM {}", appointment.getId()); return; }
-        if (smsLogRepository.hasTypeBeenSent(appointment.getId(), SmsType.CONFIRM)) return;
-
+        if (skip(appointment, SmsType.CONFIRM)) return;
         sendSms(appointment, SmsType.CONFIRM, buildConfirmationMessage(appointment));
     }
 
     @Async
     @Override
     public void sendCancellation(Appointment appointment) {
-        if (!smsEnabled) { log.info("SMS disabled, skip CANCEL {}", appointment.getId()); return; }
+        if (skip(appointment, SmsType.CANCEL)) return;
         sendSms(appointment, SmsType.CANCEL, buildCancellationMessage(appointment));
     }
 
     @Async
     @Override
     public void sendUpdate(Appointment appointment) {
-        if (!smsEnabled) { log.info("SMS disabled, skip UPDATE {}", appointment.getId()); return; }
+        if (skip(appointment, SmsType.UPDATE)) return;
         sendSms(appointment, SmsType.UPDATE, buildUpdateMessage(appointment));
     }
 
     @Async
     @Override
     public void sendReminder(Appointment appointment) {
-        if (!smsEnabled) { log.info("SMS disabled, skip REMINDER {}", appointment.getId()); return; }
-        if (smsLogRepository.hasTypeBeenSent(appointment.getId(), SmsType.REMINDER)) return;
-
+        if (skip(appointment, SmsType.REMINDER)) return;
         sendSms(appointment, SmsType.REMINDER, buildReminderMessage(appointment));
     }
 
-    private String buildConfirmationMessage(Appointment a) {
-        String date = DATE_FORMAT.format(a.getStartTime());
-        String time = TIME_FORMAT.format(a.getStartTime());
-        if ("FR".equalsIgnoreCase(language)) {
-            return String.format("Bonjour! Votre RDV %s est confirmé le %s à %s. Adresse: %s. À bientôt!",
-                    garageName, date, time, garageAddress);
+    // =========================
+    // Helpers
+    // =========================
+
+    private boolean skip(Appointment appt, SmsType type) {
+        if (!smsEnabled) {
+            log.info("SMS disabled, skip {} appt={}", type, appt.getId());
+            return true;
         }
-        return String.format("Goedendag! Uw afspraak bij %s is bevestigd op %s om %s. Adres: %s. Tot binnenkort!",
-                garageName, date, time, garageAddress);
+
+        // ✅ Duplicate prevent (consistent for all types)
+        if (smsLogRepository.hasTypeBeenSent(appt.getId(), type)) {
+            log.info("SMS already sent, skip {} appt={}", type, appt.getId());
+            return true;
+        }
+
+        // Safety: customer phone must exist
+        if (appt.getCustomer() == null || appt.getCustomer().getPhone() == null || appt.getCustomer().getPhone().isBlank()) {
+            log.warn("SMS skipped, missing customer phone appt={}", appt.getId());
+            return true;
+        }
+
+        return false;
+    }
+
+    private boolean isFrench() {
+        return "FR".equalsIgnoreCase(language);
+    }
+
+    private String fmtDate(OffsetDateTime dt) {
+        var zdt = dt.atZoneSameInstant(ZONE);
+        return isFrench() ? zdt.format(DATE_FR) : zdt.format(DATE_NL);
+    }
+
+    private String fmtTime(OffsetDateTime dt) {
+        var zdt = dt.atZoneSameInstant(ZONE);
+        return isFrench() ? zdt.format(TIME_FR) : zdt.format(TIME_NL);
+    }
+
+    private String fullAddress() {
+        return garage.getFullAddress();
+    }
+
+    // =========================
+    // Message templates
+    // =========================
+
+    private String buildConfirmationMessage(Appointment a) {
+        String date = fmtDate(a.getStartTime());
+        String time = fmtTime(a.getStartTime());
+
+        if (isFrench()) {
+            return String.format(
+                    "TayPerformance ✅ RDV confirmé\nLe %s à %s\nAdresse: %s",
+                    date, time, fullAddress()
+            );
+        }
+        return String.format(
+                "TayPerformance ✅ Afspraak bevestigd\nOp %s om %s\nAdres: %s",
+                date, time, fullAddress()
+        );
     }
 
     private String buildCancellationMessage(Appointment a) {
-        String date = DATE_FORMAT.format(a.getStartTime());
-        if ("FR".equalsIgnoreCase(language)) {
-            return String.format("%s: votre RDV du %s a été annulé. Pour replanifier: %s",
-                    garageName, date, garagePhone);
+        String date = fmtDate(a.getStartTime());
+
+        if (isFrench()) {
+            return String.format(
+                    "TayPerformance ❌ RDV annulé (prévu le %s). Besoin d'un nouveau RDV? Contact: %s",
+                    date, garage.getPhone()
+            );
         }
-        return String.format("%s: uw afspraak van %s is geannuleerd. Om opnieuw in te plannen: %s",
-                garageName, date, garagePhone);
+        return String.format(
+                "TayPerformance ❌ Afspraak geannuleerd (op %s). Nieuwe afspraak nodig? Contact: %s",
+                date, garage.getPhone()
+        );
     }
 
     private String buildUpdateMessage(Appointment a) {
-        String date = DATE_FORMAT.format(a.getStartTime());
-        String time = TIME_FORMAT.format(a.getStartTime());
-        if ("FR".equalsIgnoreCase(language)) {
-            return String.format("%s: votre RDV a été modifié. Nouvelle date: %s à %s. Adresse: %s",
-                    garageName, date, time, garageAddress);
+        String date = fmtDate(a.getStartTime());
+        String time = fmtTime(a.getStartTime());
+
+        if (isFrench()) {
+            return String.format(
+                    "TayPerformance 🔁 RDV modifié\nNouvelle date: %s à %s\nAdresse: %s",
+                    date, time, fullAddress()
+            );
         }
-        return String.format("%s: uw afspraak is gewijzigd. Nieuwe datum: %s om %s. Adres: %s",
-                garageName, date, time, garageAddress);
+        return String.format(
+                "TayPerformance 🔁 Afspraak gewijzigd\nNieuwe datum: %s om %s\nAdres: %s",
+                date, time, fullAddress()
+        );
     }
 
     private String buildReminderMessage(Appointment a) {
-        String time = TIME_FORMAT.format(a.getStartTime());
-        if ("FR".equalsIgnoreCase(language)) {
-            return String.format("Rappel %s: RDV demain à %s. Adresse: %s. À demain!",
-                    garageName, time, garageAddress);
+        String date = fmtDate(a.getStartTime());
+        String time = fmtTime(a.getStartTime());
+
+        if (isFrench()) {
+            return String.format(
+                    "TayPerformance ⏰ Rappel RDV\nLe %s à %s\nAdresse: %s",
+                    date, time, fullAddress()
+            );
         }
-        return String.format("Herinnering %s: afspraak morgen om %s. Adres: %s. Tot morgen!",
-                garageName, time, garageAddress);
+        return String.format(
+                "TayPerformance ⏰ Herinnering afspraak\nOp %s om %s\nAdres: %s",
+                date, time, fullAddress()
+        );
     }
 
+    // =========================
+    // Persist + "fake send"
+    // =========================
+
     private void sendSms(Appointment appt, SmsType type, String message) {
-        String toPhone = appt.getCustomer().getPhone();
+        String toRaw = appt.getCustomer().getPhone();
+        String toPhone = PhoneNormalizerFR.toE164(toRaw);
 
         SmsLog logEntry = SmsLog.builder()
                 .appointment(appt)
@@ -127,12 +204,32 @@ public class TwilioSmsService implements SmsService {
         logEntry = smsLogRepository.save(logEntry);
 
         try {
-            // TODO: echte Twilio call
-            log.info("SMS {} -> {}: {}", type, toPhone, message);
+            Message twilioMsg;
+
+            if (messagingServiceSid != null && !messagingServiceSid.isBlank()) {
+                twilioMsg = Message.creator(
+                        new PhoneNumber(toPhone),
+                        messagingServiceSid,
+                        message
+                ).create();
+            } else {
+                if (twilioFrom == null || twilioFrom.isBlank()) {
+                    throw new IllegalStateException("twilio.from ontbreekt (of configureer twilio.messaging-service-sid)");
+                }
+                twilioMsg = Message.creator(
+                        new PhoneNumber(toPhone),
+                        new PhoneNumber(twilioFrom),
+                        message
+                ).create();
+            }
+
+            log.info("Twilio SMS sent sid={} type={} to={}", twilioMsg.getSid(), type, toPhone);
 
             logEntry.setStatus(SmsStatus.SENT);
             logEntry.setSentAt(OffsetDateTime.now());
+            // als je veld hebt: logEntry.setProviderMessageId(twilioMsg.getSid());
             smsLogRepository.save(logEntry);
+
         } catch (Exception e) {
             log.error("SMS failed type={} appt={}", type, appt.getId(), e);
             logEntry.setStatus(SmsStatus.FAILED);

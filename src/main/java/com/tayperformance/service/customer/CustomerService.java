@@ -146,22 +146,37 @@ public class CustomerService {
     public Customer findOrCreate(String phone, String fullName) {
         String normalized = normalizePhone(phone);
 
-        return customerRepo.findByPhoneAndActiveTrue(normalized)
+        return customerRepo.findByPhone(normalized)
+                .map(existing -> {
+                    if (!existing.isActive()) {
+                        existing.setActive(true);
+                        customerRepo.save(existing);
+                        log.info("Reactivated existing customer id={} phone={}", existing.getId(), existing.getPhone());
+                    }
+                    // optioneel: naam aanvullen als leeg
+                    if ((existing.getFirstName() == null || existing.getFirstName().isBlank())
+                            && fullName != null && !fullName.isBlank()) {
+                        String[] parts = splitName(fullName);
+                        existing.setFirstName(parts[0]);
+                        existing.setLastName(parts[1]);
+                        customerRepo.save(existing);
+                    }
+                    return existing;
+                })
                 .orElseGet(() -> {
                     String[] parts = splitName(fullName);
-
                     Customer c = Customer.builder()
                             .phone(normalized)
                             .firstName(parts[0])
                             .lastName(parts[1])
                             .active(true)
                             .build();
-
                     Customer saved = customerRepo.save(c);
                     log.info("Auto-created customer id={} phone={}", saved.getId(), saved.getPhone());
                     return saved;
                 });
     }
+
 
     // -------------------- internal helpers --------------------
 

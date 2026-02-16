@@ -1,4 +1,4 @@
-package com.tayperformance.controller.internal;
+package com.tayperformance.controller.internalapi;
 
 import com.tayperformance.dto.service.CreateDetailServiceRequest;
 import com.tayperformance.dto.service.DetailServiceResponse;
@@ -18,7 +18,7 @@ import java.util.List;
 @RequestMapping("/api/internal/services")
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
-public class InternalDetailServiceController {
+public class InternalServiceController {
 
     private final DetailServiceRepository repo;
 
@@ -43,7 +43,7 @@ public class InternalDetailServiceController {
 
     @PatchMapping("/{id}")
     public DetailServiceResponse update(@PathVariable Long id,
-                                        @RequestBody UpdateDetailServiceRequest req) {
+                                        @Valid @RequestBody UpdateDetailServiceRequest req) {
         DetailService s = repo.findById(id)
                 .orElseThrow(() -> NotFoundException.of("DetailService", id));
 

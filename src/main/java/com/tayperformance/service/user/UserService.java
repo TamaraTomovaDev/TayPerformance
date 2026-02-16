@@ -22,15 +22,46 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
+    // ----------- LIST (admin) -----------
+
     @Transactional(readOnly = true)
-    public Page<User> list(Pageable pageable) {
-        return userRepository.findAllByOrderByCreatedAtDesc(pageable);
+    public Page<User> list(String q, Pageable pageable) {
+        if (q == null || q.isBlank()) {
+            return userRepository.findAllByOrderByCreatedAtDesc(pageable);
+        }
+        return userRepository.findByUsernameContainingIgnoreCaseOrderByCreatedAtDesc(q.trim(), pageable);
     }
 
-    public void deactivateUser(Long id) {
-        User u = userRepository.findById(id)
-                .orElseThrow(() -> NotFoundException.of("User", id));
+    // ----------- CREATE (admin) -----------
 
+    public User createUser(String username, String rawPassword, Role role) {
+        if (username == null || username.isBlank()) throw new BadRequestException("Username is verplicht");
+        if (rawPassword == null || rawPassword.isBlank()) throw new BadRequestException("Password is verplicht");
+        if (role == null) throw new BadRequestException("Role is verplicht");
+
+        validatePassword(rawPassword);
+
+        String normalized = username.trim().toLowerCase();
+        if (userRepository.existsByUsernameIgnoreCase(normalized)) {
+            throw new BadRequestException("Gebruikersnaam bestaat al: " + normalized);
+        }
+
+        User user = User.builder()
+                .username(normalized)
+                .passwordHash(passwordEncoder.encode(rawPassword))
+                .role(role)
+                .active(true)
+                .build();
+
+        User saved = userRepository.save(user);
+        log.info("Created user id={} username={} role={}", saved.getId(), saved.getUsername(), saved.getRole());
+        return saved;
+    }
+
+    // ----------- ACTIVATE / DEACTIVATE -----------
+
+    public void deactivateUser(Long id) {
+        User u = load(id);
         if (!u.isActive()) return;
 
         u.setActive(false);
@@ -39,9 +70,7 @@ public class UserService {
     }
 
     public void reactivateUser(Long id) {
-        User u = userRepository.findById(id)
-                .orElseThrow(() -> NotFoundException.of("User", id));
-
+        User u = load(id);
         if (u.isActive()) return;
 
         u.setActive(true);
@@ -49,42 +78,33 @@ public class UserService {
         log.info("Reactivated user id={} username={}", u.getId(), u.getUsername());
     }
 
+    // ----------- PASSWORD / ROLE -----------
+
     public void changePassword(Long id, String newPassword) {
         validatePassword(newPassword);
 
-        User u = userRepository.findById(id)
-                .orElseThrow(() -> NotFoundException.of("User", id));
-
+        User u = load(id);
         u.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(u);
         log.info("Changed password for user id={}", u.getId());
     }
 
-    public void changeRole(Long id, String newRole) {
-        User u = userRepository.findById(id)
-                .orElseThrow(() -> NotFoundException.of("User", id));
+    public void changeRole(Long id, Role newRole) {
+        if (newRole == null) throw new BadRequestException("Rol is verplicht (ADMIN/STAFF)");
 
-        Role role = parseRole(newRole);
+        User u = load(id);
+        if (u.getRole() == newRole) return;
 
-        if (u.getRole() == role) return;
-
-        u.setRole(role);
+        u.setRole(newRole);
         userRepository.save(u);
-
-        log.info("Changed role for user id={} to {}", u.getId(), role);
+        log.info("Changed role for user id={} to {}", u.getId(), newRole);
     }
 
-    // ---------------- helpers ----------------
+    // ----------- helpers -----------
 
-    private Role parseRole(String role) {
-        if (role == null || role.isBlank()) {
-            throw new BadRequestException("Rol is verplicht (ADMIN/STAFF)");
-        }
-        try {
-            return Role.valueOf(role.trim().toUpperCase());
-        } catch (Exception e) {
-            throw new BadRequestException("Ongeldige rol: " + role + " (gebruik ADMIN of STAFF)");
-        }
+    private User load(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> NotFoundException.of("User", id));
     }
 
     private void validatePassword(String p) {
@@ -94,7 +114,6 @@ public class UserService {
         if (p.length() < 8) {
             throw new BadRequestException("Wachtwoord moet minimaal 8 karakters zijn");
         }
-        // mini “strong-ish” check (optioneel)
         boolean hasUpper = p.chars().anyMatch(Character::isUpperCase);
         boolean hasLower = p.chars().anyMatch(Character::isLowerCase);
         boolean hasDigit = p.chars().anyMatch(Character::isDigit);

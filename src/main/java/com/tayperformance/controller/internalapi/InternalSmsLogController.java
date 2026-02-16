@@ -1,4 +1,4 @@
-package com.tayperformance.controller.internal;
+package com.tayperformance.controller.internalapi;
 
 import com.tayperformance.dto.sms.SmsLogResponse;
 import com.tayperformance.entity.SmsLog;
@@ -34,10 +34,10 @@ public class InternalSmsLogController {
     public List<SmsLogResponse> listByAppointment(@PathVariable Long appointmentId) {
 
         if (!appointmentRepo.existsById(appointmentId)) {
-            throw new NotFoundException("Afspraak niet gevonden");
+            throw NotFoundException.of("Appointment", appointmentId);
         }
 
-        return smsLogRepo.findAllByAppointmentIdOrderByCreatedAtDesc(appointmentId)
+        return smsLogRepo.findAllByAppointment_IdOrderByCreatedAtDesc(appointmentId)
                 .stream()
                 .map(SmsLogMapper::toResponse)
                 .toList();

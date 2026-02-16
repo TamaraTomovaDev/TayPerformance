@@ -1,4 +1,4 @@
-package com.tayperformance.controller.internal;
+package com.tayperformance.controller.internalapi;
 
 import com.tayperformance.dto.customer.CustomerHistoryResponse;
 import com.tayperformance.dto.customer.CustomerResponse;
@@ -39,12 +39,13 @@ public class InternalCustomerController {
         return customerService.update(id, req);
     }
 
-    @PostMapping("/{id}/deactivate")
+    // ✅ REST: status toggle = PATCH
+    @PatchMapping("/{id}/deactivate")
     public void deactivate(@PathVariable Long id) {
         customerService.deactivate(id);
     }
 
-    @PostMapping("/{id}/reactivate")
+    @PatchMapping("/{id}/reactivate")
     public void reactivate(@PathVariable Long id) {
         customerService.reactivate(id);
     }
